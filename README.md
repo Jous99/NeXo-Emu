@@ -6,16 +6,16 @@ The project aims to maintain high levels of compatibility and performance while 
 
 ## Development and Engineering Focus
 
-Currently, the primary development effort is focused on implementing a robust online infrastructure. This involves:
+The current development phase is centered on implementing native online capabilities. This is being achieved through:
 
-* **Online Capability Development**: Modifying the emulator core to support native online functionality.
-* **Reverse Engineering**: Actively reverse-engineering Raptor Network protocols to adapt and integrate advanced networking features into the NeXo Network.
-* **Network Integration**: Designing custom interfaces for seamless communication between the emulator and the NeXo ecosystem.
+* **Raptor Network Reverse Engineering**: Active analysis and reverse engineering of Raptor Network communication protocols to understand and adapt their online infrastructure.
+* **NeXo Network Implementation**: Developing a custom network layer based on the findings from Raptor Network to provide stable online services within the NeXo ecosystem.
+* **Core Modification**: Modifying the original emulator codebase to support these new networking interfaces and synchronization methods.
 
 ## Key Features
 
 * **Yuzu-Based Core**: Utilizes the industry-standard Yuzu codebase as a foundation for maximum game compatibility and rendering accuracy.
-* **NeXo Network Integration**: Native support for NeXo Network protocols, enabling advanced connectivity features and ecosystem-specific services.
+* **Native Online Support**: Ongoing development of integrated online features derived from network protocol analysis.
 * **Optimized Rendering Pipeline**: Implementation of custom shader management and memory allocation techniques to improve frame stability.
 * **Ecosystem Architecture**: Specifically engineered to operate as the primary emulation component within the broader NeXo software suite.
 
