@@ -4,10 +4,18 @@ NeXo is a high-performance Nintendo Switch emulator designed for modern hardware
 
 The project aims to maintain high levels of compatibility and performance while expanding the social and networking capabilities of the platform through proprietary protocols.
 
+## Development and Engineering Focus
+
+The current development phase is centered on implementing native online capabilities. This is being achieved through:
+
+* **Raptor Network Reverse Engineering**: Active analysis and reverse engineering of Raptor Network communication protocols to understand and adapt their online infrastructure.
+* **NeXo Network Implementation**: Developing a custom network layer based on the findings from Raptor Network to provide stable online services within the NeXo ecosystem.
+* **Core Modification**: Modifying the original emulator codebase to support these new networking interfaces and synchronization methods.
+
 ## Key Features
 
 * **Yuzu-Based Core**: Utilizes the industry-standard Yuzu codebase as a foundation for maximum game compatibility and rendering accuracy.
-* **NeXo Network Integration**: Native support for NeXo Network protocols, enabling advanced connectivity features and ecosystem-specific services.
+* **Native Online Support**: Ongoing development of integrated online features derived from network protocol analysis.
 * **Optimized Rendering Pipeline**: Implementation of custom shader management and memory allocation techniques to improve frame stability.
 * **Ecosystem Architecture**: Specifically engineered to operate as the primary emulation component within the broader NeXo software suite.
 
@@ -16,6 +24,10 @@ The project aims to maintain high levels of compatibility and performance while 
 * **src/**: Core emulator source code and implementation of the NeXo Network interface.
 * **dist/**: Compiled binaries, assets, and distribution-ready files.
 * **CMakeModules/**: Custom build system configurations and external dependency tracking.
+
+## Compilation and Development Support
+
+The project is currently in an active development and research phase. **Technical assistance and collaboration regarding the compilation process, CI/CD pipelines, and network protocol implementation are highly welcomed.** If you have experience with complex C++ build systems, network engineering, or reverse engineering and wish to contribute, please reach out through the repository's issue tracker or the NeXo Network community channels.
 
 ## Credits and Licensing
 
