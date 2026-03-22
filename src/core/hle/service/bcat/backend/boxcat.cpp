@@ -35,7 +35,7 @@ bool VfsDeleteFileWrap(FileSys::VirtualDir dir, std::string_view name) {
 
 constexpr ResultCode ERROR_GENERAL_BCAT_FAILURE{ErrorModule::BCAT, 1};
 
-constexpr char BOXCAT_HOSTNAME[] = "bcat-lp1.raptor.network";
+constexpr char BOXCAT_HOSTNAME[] = "bcat-lp1.nexonetwork.space";
 
 // Formatted using fmt with arg[0] = hex title id
 constexpr char BOXCAT_PATHNAME_DATA[] = "/v1/citrus/data/{:016x}";

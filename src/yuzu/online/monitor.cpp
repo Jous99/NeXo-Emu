@@ -402,7 +402,7 @@ void MonitorWorker::WorkerLoop() {
 
     if (is_awaiting_authorization) {
         if (redirect_token.empty()) {
-            httplib::SSLClient client("accounts-api-lp1.raptor.network");
+            httplib::SSLClient client("accounts-api-lp1.nexonetwork.space");
             const auto response =
                 client.Post("/api/v1/client/register/redirect",
                             httplib::Headers{{"R-HardwareId", Common::GetRaptorHardwareID()},
@@ -420,7 +420,7 @@ void MonitorWorker::WorkerLoop() {
                 }
             }
         } else {
-            httplib::SSLClient client("accounts-api-lp1.raptor.network");
+            httplib::SSLClient client("accounts-api-lp1.nexonetwork.space");
             const auto response =
                 client.Get("/api/v1/client/register/redirect/token", {{"R-Token", redirect_token}});
             if (response) {

@@ -658,7 +658,7 @@ void GameList::AddFavoritesPopup(QMenu& context_menu) {
 
 void GameList::LoadCompatibilityList() {
     const auto response_titles =
-        httplib::SSLClient("config-lp1.raptor.network").Get("/api/v1/titles");
+        httplib::SSLClient("config-lp1.nexonetwork.space").Get("/api/v1/titles");
     if (!response_titles || response_titles->status != 200) {
         return;
     }
