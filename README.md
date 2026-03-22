@@ -4,6 +4,14 @@ NeXo is a high-performance Nintendo Switch emulator designed for modern hardware
 
 The project aims to maintain high levels of compatibility and performance while expanding the social and networking capabilities of the platform through proprietary protocols.
 
+## Development and Engineering Focus
+
+Currently, the primary development effort is focused on implementing a robust online infrastructure. This involves:
+
+* **Online Capability Development**: Modifying the emulator core to support native online functionality.
+* **Reverse Engineering**: Actively reverse-engineering Raptor Network protocols to adapt and integrate advanced networking features into the NeXo Network.
+* **Network Integration**: Designing custom interfaces for seamless communication between the emulator and the NeXo ecosystem.
+
 ## Key Features
 
 * **Yuzu-Based Core**: Utilizes the industry-standard Yuzu codebase as a foundation for maximum game compatibility and rendering accuracy.
@@ -16,6 +24,10 @@ The project aims to maintain high levels of compatibility and performance while 
 * **src/**: Core emulator source code and implementation of the NeXo Network interface.
 * **dist/**: Compiled binaries, assets, and distribution-ready files.
 * **CMakeModules/**: Custom build system configurations and external dependency tracking.
+
+## Compilation and Development Support
+
+The project is currently in an active development and research phase. **Technical assistance and collaboration regarding the compilation process, CI/CD pipelines, and network protocol implementation are highly welcomed.** If you have experience with complex C++ build systems, network engineering, or reverse engineering and wish to contribute, please reach out through the repository's issue tracker or the NeXo Network community channels.
 
 ## Credits and Licensing
 
