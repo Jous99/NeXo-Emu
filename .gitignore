@@ -1,0 +1,58 @@
+# NeXo Project - Git Ignore Configuration
+
+# Build Directories
+/build/
+/build_*/
+/out/
+/bin/
+
+# IDEs and Editors
+.vscode/
+.vs/
+*.user
+*.userosscache
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+.idea/
+*.swp
+*.swo
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+/CMakeModules/yuzu-config.cmake*
+
+# Compiled Binaries
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.pdb
+*.exp
+*.app
+*.ipa
+
+# System and OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Submodules and Externals
+# Note: We keep the .gitmodules, but sometimes build artifacts 
+# inside externals should be ignored.
+/externals/*/build/
+/externals/vcpkg/packages/
+/externals/vcpkg/buildtrees/
+/externals/vcpkg/downloads/
+
+# Logs and Temporary Files
+*.log
+*.tmp
+*.bak
