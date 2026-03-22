@@ -1,24 +1,27 @@
-# NeXo 1 🚀
+# NeXo
 
-**NeXo 1** is a high-performance Nintendo Switch emulator built for the next generation of emulation. It combines the proven stability of the **Yuzu** core with custom enhancements designed specifically for the **NeXo Network** ecosystem.
+NeXo is a high-performance Nintendo Switch emulator designed for modern hardware. Built upon the foundational architecture of the Yuzu project, it incorporates custom optimizations and direct integration with the NeXo Network ecosystem to provide a stable and connected emulation experience.
 
-Focused on speed, accuracy, and modern connectivity, NeXo 1 aims to provide a seamless experience for both casual players and developers within the NeXo community.
+The project aims to maintain high levels of compatibility and performance while expanding the social and networking capabilities of the platform through proprietary protocols.
 
-## ✨ Key Features
-* **Yuzu-Based Core:** Powered by the industry-leading foundations of the Yuzu project for maximum game compatibility.
-* **NeXo Network Integration:** Native support for the proprietary NeXo Network, enabling specialized online features and community services.
-* **Optimized Rendering:** Custom shader pipelines and memory management for improved performance on modern hardware.
-* **Ecosystem Ready:** Designed to work in perfect sync with other NeXo projects and services.
+## Key Features
 
-## 📁 Project Structure
-* `src/`: Core emulator logic and source files.
-* `dist/`: Pre-compiled binaries and essential assets.
-* `CMakeModules/`: Custom build configurations and dependency management.
+* **Yuzu-Based Core**: Utilizes the industry-standard Yuzu codebase as a foundation for maximum game compatibility and rendering accuracy.
+* **NeXo Network Integration**: Native support for NeXo Network protocols, enabling advanced connectivity features and ecosystem-specific services.
+* **Optimized Rendering Pipeline**: Implementation of custom shader management and memory allocation techniques to improve frame stability.
+* **Ecosystem Architecture**: Specifically engineered to operate as the primary emulation component within the broader NeXo software suite.
 
-## 📜 Credits
-NeXo 1 is an open-source initiative. We are deeply grateful to the **Yuzu** team and the original contributors whose years of dedication made this project possible.
+## Project Structure
 
-For licensing information, please refer to the [license.txt](license.txt) file.
+* **src/**: Core emulator source code and implementation of the NeXo Network interface.
+* **dist/**: Compiled binaries, assets, and distribution-ready files.
+* **CMakeModules/**: Custom build system configurations and external dependency tracking.
+
+## Credits and Licensing
+
+NeXo is an open-source initiative. We acknowledge and credit the Yuzu team and its original contributors for their extensive research and development in the field of Switch emulation.
+
+For detailed licensing terms, please consult the [license.txt](license.txt) file included in this repository.
 
 ---
-*Developed by [Jous99](https://forgejo.joustech.space/Jous99) - Heart of the NeXo Ecosystem.*
+*Developed by [Jous99](https://forgejo.joustech.space/Jous99) - Core Component of the NeXo Ecosystem.*
