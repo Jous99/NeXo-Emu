@@ -16,7 +16,7 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 else()
     message(FATAL_ERROR "No package available for this platform")
 endif()
-set(package_url "https://github.com/yuzu-emu/${package_repo}")
+set(package_url "https://github.com/yuzu-mirror/${package_repo}")
 
 set(prefix "${CMAKE_BINARY_DIR}/externals/${lib_name}")
 if (NOT EXISTS "${prefix}")
