@@ -1,39 +1,13 @@
-# NeXo
+# Raptor Network Client
 
-NeXo is a high-performance Nintendo Switch emulator designed for modern hardware. Built upon the foundational architecture of the Yuzu project, it incorporates custom optimizations and direct integration with the NeXo Network ecosystem to provide a stable and connected emulation experience.
+Raptor Network is a custom network infrastructure designed to provide online services and multiplayer connectivity for gaming environments. This repository contains the source code for the client-side implementation.
 
-The project aims to maintain high levels of compatibility and performance while expanding the social and networking capabilities of the platform through proprietary protocols.
+## What is it?
+The Raptor Network Client acts as a bridge between local applications and private servers. It enables features that are typically found in official gaming networks, such as:
 
-## Development and Engineering Focus
+* **Multiplayer Connectivity:** Facilitating online play through custom backend protocols.
+* **Authentication:** Managing user sessions and secure connections to the network.
+* **Data Synchronization:** Handling real-time communication between users.
 
-The current development phase is centered on implementing native online capabilities. This is being achieved through:
-
-* **Raptor Network Reverse Engineering**: Active analysis and reverse engineering of Raptor Network communication protocols to understand and adapt their online infrastructure.
-* **NeXo Network Implementation**: Developing a custom network layer based on the findings from Raptor Network to provide stable online services within the NeXo ecosystem.
-* **Core Modification**: Modifying the original emulator codebase to support these new networking interfaces and synchronization methods.
-
-## Key Features
-
-* **Yuzu-Based Core**: Utilizes the industry-standard Yuzu codebase as a foundation for maximum game compatibility and rendering accuracy.
-* **Native Online Support**: Ongoing development of integrated online features derived from network protocol analysis.
-* **Optimized Rendering Pipeline**: Implementation of custom shader management and memory allocation techniques to improve frame stability.
-* **Ecosystem Architecture**: Specifically engineered to operate as the primary emulation component within the broader NeXo software suite.
-
-## Project Structure
-
-* **src/**: Core emulator source code and implementation of the NeXo Network interface.
-* **dist/**: Compiled binaries, assets, and distribution-ready files.
-* **CMakeModules/**: Custom build system configurations and external dependency tracking.
-
-## Compilation and Development Support
-
-The project is currently in an active development and research phase. **Technical assistance and collaboration regarding the compilation process, CI/CD pipelines, and network protocol implementation are highly welcomed.** If you have experience with complex C++ build systems, network engineering, or reverse engineering and wish to contribute, please reach out through the repository's issue tracker or the NeXo Network community channels.
-
-## Credits and Licensing
-
-NeXo is an open-source initiative. We acknowledge and credit the Yuzu team and its original contributors for their extensive research and development in the field of Switch emulation.
-
-For detailed licensing terms, please consult the [license.txt](license.txt) file included in this repository.
-
----
-*Developed by [Jous99](https://forgejo.joustech.space/Jous99) - Core Component of the NeXo Ecosystem.*
+## Purpose
+This repository serves as an archival backup of the client source code for educational and research purposes. It is an independent project and is not affiliated with any official game console manufacturers.
