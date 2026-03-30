@@ -30,8 +30,8 @@ void from_json(const nlohmann::json& json, OnlineSubscriptionInfo& info) {
     json.at("show_subscription_upgrade_notice").get_to(info.show_subscription_upgrade_notice);
 }
 
-constexpr const char ACCOUNTS_URL[] = "accounts-api-lp1.raptor.network";
-constexpr const char CONFIG_URL[] = "config-lp1.raptor.network";
+constexpr const char ACCOUNTS_URL[] = "accounts-api-lp1.nexonetwork.space";
+constexpr const char CONFIG_URL[] = "config-lp1.nexonetwork.space";
 
 OnlineInitiator::OnlineInitiator() {
     Connect();
@@ -79,23 +79,23 @@ bool OnlineInitiator::IsConnected() const {
 }
 
 std::string OnlineInitiator::ProfileApiUrl() const {
-    return "profile-lp1.raptor.network";
+    return "profile-lp1.nexonetwork.space";
 }
 
 std::string OnlineInitiator::FriendsApiUrl() const {
-    return "friends-lp1.raptor.network";
+    return "friends-lp1.nexonetwork.space";
 }
 
 std::string OnlineInitiator::TroubleshooterUrl() const {
-    return "status-lp1.raptor.network";
+    return "status-lp1.nexonetwork.space";
 }
 
 std::string OnlineInitiator::NotificationUrl() const {
-    return "notification-lp1.raptor.network";
+    return "notification-lp1.nexonetwork.space";
 }
 
 std::string OnlineInitiator::ConnectorUrl() const {
-    return "connector-lp1.raptor.network";
+    return "connector-lp1.nexonetwork.space";
 }
 
 std::optional<std::string> OnlineInitiator::RewriteUrl(const std::string& url) const {

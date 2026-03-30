@@ -969,7 +969,7 @@ void Config::ReadWebServiceValues() {
 
     Settings::values.enable_telemetry =
         ReadSetting(QStringLiteral("enable_telemetry"), true).toBool();
-    Settings::values.web_api_url = "https://citrus-api-lp1.raptor.network";
+    Settings::values.web_api_url = "https://citrus-api-lp1.nexonetwork.space";
     Settings::values.yuzu_username =
         ReadSetting(QStringLiteral("yuzu_username")).toString().toStdString();
     Settings::values.yuzu_token =
