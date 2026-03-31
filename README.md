@@ -7,7 +7,7 @@
 
 ## What is NeXoEmu?
 
-**NeXoEmu** is a Nintendo Switch emulator based on [Eden](https://eden-emu.dev/) with full **Raptor Network** online services integration. It allows you to play Nintendo Switch games on PC with online multiplayer support through Raptor Network's infrastructure.
+**NeXoEmu** is a Nintendo Switch emulator based on [Eden](https://eden-emu.dev/) with full **NeXoNetwork** online services integration. It allows you to play Nintendo Switch games on PC with online multiplayer support through Raptor Network's infrastructure.
 
 - **Base**: Eden Emulator (2026, actively maintained fork of yuzu)
 - **Online layer**: Ported from RaptorCitrus (Raptor Network client, 2021)
@@ -77,9 +77,9 @@ cmake --build . --config Release
 
 ---
 
-## Setting up Raptor Network
+## Setting up NeXoNetwork
 
-1. Create an account at **raptor.network**
+1. Create an account at **nexonetwork.space**
 2. Generate a token from your account dashboard
 3. Open NeXoEmu → **Settings** → **Raptor Network**
 4. Paste your token and click **Connect**
@@ -134,14 +134,14 @@ NeXoEmu communicates with Raptor Network using HTTPS with these custom headers:
 
 | Service      | Host                                  |
 |--------------|---------------------------------------|
-| Accounts     | `accounts-api-lp1.raptor.network`     |
-| Config       | `config-lp1.raptor.network`           |
-| Friends      | `friends-lp1.raptor.network`          |
-| Profile      | `profile-lp1.raptor.network`          |
-| Notifications| `notification-lp1.raptor.network`     |
-| P2P Connector| `connector-lp1.raptor.network`        |
-| BCAT         | `bcat-lp1.raptor.network`             |
-| Status       | `status-lp1.raptor.network`           |
+| Accounts     | `accounts-api-lp1.nexonetwork.space`     |
+| Config       | `config-lp1.nexonetwork.space`           |
+| Friends      | `friends-lp1.nexonetwork.space`          |
+| Profile      | `profile-lp1.nexonetwork.space`          |
+| Notifications| `notification-lp1.nexonetwork.space`     |
+| P2P Connector| `connector-lp1.nexonetwork.space`        |
+| BCAT         | `bcat-lp1.nexonetwork.space`             |
+| Status       | `status-lp1.nexonetwork.space`           |
 
 ---
 
