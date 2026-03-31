@@ -1,0 +1,26 @@
+// ============================================================
+// PATCH 03: Modificar BCAT para usar servidores Raptor Network
+// ============================================================
+// Archivo a modificar: src/core/hle/service/bcat/backend/boxcat.cpp
+//                      (o el equivalente en Eden)
+//
+// INSTRUCCIONES:
+// 1. Incluir el nuevo header:
+//    #include "core/hle/service/bcat/backend/boxcat_raptor.h"
+//
+// 2. Buscar donde se define el hostname de BCAT (BOXCAT_HOSTNAME o similar).
+//    En Eden puede ser diferente a RaptorCitrus.
+//    Reemplazar el hostname por el de Raptor:
+//
+//    ANTES:
+//    constexpr char BOXCAT_HOSTNAME[] = "api.yuzu-emu.org";
+//    // o cualquier otro hostname que tenga Eden
+//
+//    DESPUES:
+//    constexpr char BOXCAT_HOSTNAME[] = "bcat-lp1.raptor.network";
+//
+// 3. Buscar donde se envian headers de cliente y agregar:
+//    {"Boxcat-Client-Type", Service::BCAT::RAPTOR_BCAT_CLIENT_TYPE}
+//
+// NOTA: Si Eden no tiene un backend BCAT tipo "boxcat", puede que
+// necesites crear uno nuevo basado en el patron existente.

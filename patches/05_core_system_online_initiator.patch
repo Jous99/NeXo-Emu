@@ -1,0 +1,50 @@
+// ============================================================
+// PATCH 05: Agregar OnlineInitiator a Core::System
+// ============================================================
+// Archivos a modificar:
+//   - src/core/core.h
+//   - src/core/core.cpp
+//
+// INSTRUCCIONES PARA core.h:
+//
+// 1. Agregar forward declaration al inicio (cerca de las otras):
+//    namespace Core {
+//    class OnlineInitiator;
+//    }
+//
+// 2. En la clase System, seccion publica, agregar:
+//
+//    /// Obtiene el gestor de conexion con Raptor Network.
+//    [[nodiscard]] OnlineInitiator* GetOnlineInitiator();
+//    [[nodiscard]] const OnlineInitiator* GetOnlineInitiator() const;
+//
+// 3. En la seccion privada de System (struct Impl), agregar:
+//
+//    std::unique_ptr<OnlineInitiator> online_initiator;
+//
+//
+// INSTRUCCIONES PARA core.cpp:
+//
+// 1. Agregar include:
+//    #include "core/online_initiator.h"
+//
+// 2. En la funcion System::Initialize() (o el constructor de Impl),
+//    agregar la creacion del OnlineInitiator:
+//
+//    // Inicializar conexion con Raptor Network
+//    impl->online_initiator = std::make_unique<OnlineInitiator>();
+//
+// 3. Implementar los getters:
+//
+//    OnlineInitiator* System::GetOnlineInitiator() {
+//        return impl->online_initiator.get();
+//    }
+//    const OnlineInitiator* System::GetOnlineInitiator() const {
+//        return impl->online_initiator.get();
+//    }
+//
+// 4. En System::ShutdownMainProcess() o el destructor, agregar:
+//
+//    if (impl->online_initiator) {
+//        impl->online_initiator->Disconnect();
+//    }

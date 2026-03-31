@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NexoEmu — Nintendo Switch Online Emulator</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    :root {
+      --sw-red:   #E60012;
+      --sw-blue:  #0AB9E6;
+      --sw-dark:  #1a1a2e;
+      --sw-dark2: #16213e;
+      --sw-dark3: #0f3460;
+      --sw-card:  #1e2a42;
+      --sw-card2: #243350;
+      --sw-border:#2a3d5e;
+      --sw-text:  #ffffff;
+      --sw-muted: #8fa3c0;
+      --sw-green: #00e676;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      background: var(--sw-dark);
+      color: var(--sw-text);
+      overflow-x: hidden;
+    }
+
+    /* ─── NAV ────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 200;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      background: rgba(22,33,62,0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(10,185,230,0.15);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 1.2rem;
+      letter-spacing: -0.3px;
+      text-decoration: none;
+      color: var(--sw-text);
+    }
+
+    /* Switch-style logo pill */
+    .logo-pill {
+      display: flex;
+      align-items: center;
+      background: linear-gradient(90deg, var(--sw-red) 50%, var(--sw-blue) 50%);
+      border-radius: 100px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: 1px;
+    }
+
+    .nav-links { display:flex; gap:1.8rem; list-style:none; }
+    .nav-links a {
+      color: var(--sw-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: color .2s;
+    }
+    .nav-links a:hover { color: var(--sw-blue); }
+
+    .nav-dl {
+      background: var(--sw-red);
+      color: #fff !important;
+      padding: 0.4rem 1.1rem;
+      border-radius: 8px;
+      font-weight: 700 !important;
+      transition: filter .2s !important;
+    }
+    .nav-dl:hover { filter: brightness(1.2); color:#fff !important; }
+
+    /* ─── HERO ───────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 80px 2rem 4rem;
+    }
+
+    /* Gradient bg */
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 100% 70% at 50% -10%,
+          rgba(10,185,230,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 90% 80%,
+          rgba(230,0,18,0.12) 0%, transparent 60%),
+        linear-gradient(180deg, var(--sw-dark) 0%, var(--sw-dark2) 100%);
+    }
+
+    /* Subtle dot grid */
+    .hero-dots {
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(10,185,230,0.08) 1px, transparent 1px);
+      background-size: 36px 36px;
+    }
+
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+      max-width: 1160px;
+      width: 100%;
+    }
+
+    .hero-text {}
+
+    .hero-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0,230,118,0.12);
+      border: 1px solid rgba(0,230,118,0.3);
+      color: var(--sw-green);
+      padding: 0.3rem 0.9rem;
+      border-radius: 100px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 1.4rem;
+    }
+
+    .chip-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--sw-green);
+      animation: blink 2s infinite;
+    }
+
+    @keyframes blink {
+      0%,100% { opacity:1; } 50% { opacity:0.3; }
+    }
+
+    .hero-title {
+      font-size: clamp(3rem, 6vw, 5rem);
+      font-weight: 900;
+      line-height: 1.0;
+      letter-spacing: -2px;
+      margin-bottom: 1.2rem;
+    }
+
+    .ht-nexo { color: var(--sw-blue); }
+    .ht-emu  { color: #fff; }
+
+    .hero-sub {
+      font-size: 1.05rem;
+      color: var(--sw-muted);
+      line-height: 1.7;
+      margin-bottom: 2.2rem;
+      max-width: 460px;
+    }
+
+    .hero-sub b { color: #fff; }
+
+    .hero-btns {
+      display: flex;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-red {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--sw-red);
+      color: #fff;
+      padding: 0.85rem 1.8rem;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      text-decoration: none;
+      transition: all .2s;
+      box-shadow: 0 4px 20px rgba(230,0,18,0.35);
+    }
+    .btn-red:hover {
+      filter: brightness(1.15);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 28px rgba(230,0,18,0.5);
+    }
+
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: var(--sw-text);
+      padding: 0.85rem 1.8rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      text-decoration: none;
+      border: 1.5px solid var(--sw-border);
+      transition: all .2s;
+    }
+    .btn-outline:hover {
+      border-color: var(--sw-blue);
+      color: var(--sw-blue);
+      transform: translateY(-2px);
+    }
+
+    /* ─── SWITCH CONSOLE ILLUSTRATION ────────── */
+    .hero-visual {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .switch-wrap {
+      position: relative;
+      filter: drop-shadow(0 30px 80px rgba(10,185,230,0.2))
+              drop-shadow(0 0 40px rgba(230,0,18,0.1));
+    }
+
+    /* Main console body */
+    .sw-console {
+      width: 340px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+
+    /* Joy-Con */
+    .joycon {
+      width: 58px;
+      height: 200px;
+      border-radius: 24px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .joycon-l {
+      background: linear-gradient(160deg, #e60012, #b5000e);
+      border-radius: 24px 12px 12px 24px;
+    }
+    .joycon-r {
+      background: linear-gradient(160deg, #0AB9E6, #0889ae);
+      border-radius: 12px 24px 24px 12px;
+    }
+
+    /* Joystick */
+    .joycon-stick {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.35);
+      border: 2px solid rgba(255,255,255,0.15);
+      position: absolute;
+    }
+    .joycon-l .joycon-stick { top: 24px; left: 50%; transform: translateX(-50%); }
+    .joycon-r .joycon-stick { bottom: 44px; left: 50%; transform: translateX(-50%); }
+
+    /* Joycon buttons */
+    .joycon-btns {
+      position: absolute;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    .joycon-l .joycon-btns { bottom: auto; top: 60px; }
+    .joycon-r .joycon-btns { bottom: 20px; }
+
+    .joycon-btn {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+    .btn-a { background: #1fcc64; }
+    .btn-b { background: #e60012; }
+    .btn-x { background: #0AB9E6; }
+    .btn-y { background: #f5a623; }
+    .btn-gray { background: rgba(255,255,255,0.2); }
+
+    /* Tablet/Screen part */
+    .sw-tablet {
+      flex: 1;
+      height: 200px;
+      background: #0a0e1a;
+      border: 2px solid #2a3d5e;
+      border-left: none;
+      border-right: none;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sw-screen {
+      flex: 1;
+      background: var(--sw-dark2);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 4px;
+      padding: 8px;
+    }
+
+    .sw-game-tile {
+      border-radius: 4px;
+      background: var(--sw-card);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.55rem;
+      font-weight: 700;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .sw-game-tile.active {
+      border: 1.5px solid var(--sw-blue);
+      box-shadow: 0 0 8px rgba(10,185,230,0.4);
+    }
+
+    .sw-game-tile .tile-icon { font-size: 1rem; }
+
+    .sw-statusbar {
+      height: 14px;
+      background: #0a0e1a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+    }
+
+    .sw-statusbar span {
+      font-size: 0.45rem;
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* Online badge over console */
+    .online-badge {
+      position: absolute;
+      top: -18px;
+      right: -24px;
+      background: var(--sw-green);
+      color: #000;
+      font-size: 0.65rem;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 100px;
+      letter-spacing: 0.5px;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-6px); }
+    }
+
+    /* Raptor signal ping */
+    .signal-ring {
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80px; height: 80px;
+    }
+
+    .ring {
+      position: absolute;
+      border: 2px solid var(--sw-blue);
+      border-radius: 50%;
+      opacity: 0;
+      animation: ripple 2.4s ease-out infinite;
+    }
+
+    .ring:nth-child(2) { animation-delay: 0.8s; }
+    .ring:nth-child(3) { animation-delay: 1.6s; }
+
+    @keyframes ripple {
+      0%   { width:10px; height:10px; top:35px; left:35px; opacity:0.8; }
+      100% { width:80px; height:80px; top:0;    left:0;    opacity:0; }
+    }
+
+    /* ─── SECTION BASE ───────────────────────── */
+    section { padding: 5.5rem 2rem; }
+    .s-inner { max-width: 1100px; margin: 0 auto; }
+
+    .s-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--sw-blue);
+      margin-bottom: 0.6rem;
+    }
+
+    h2 {
+      font-size: clamp(1.7rem, 4vw, 2.5rem);
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.5px;
+    }
+
+    .s-desc {
+      color: var(--sw-muted);
+      font-size: 1rem;
+      max-width: 580px;
+      margin-top: 0.75rem;
+      line-height: 1.7;
+    }
+
+    /* ─── ABOUT ──────────────────────────────── */
+    #about { background: var(--sw-dark2); }
+
+    .about-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 1.25rem;
+      margin-top: 3rem;
+    }
+
+    .acard {
+      background: var(--sw-card);
+      border: 1px solid var(--sw-border);
+      border-radius: 16px;
+      padding: 2rem;
+      transition: all .3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .acard::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      opacity: 0;
+      transition: opacity .3s;
+      background: radial-gradient(circle at 30% 30%, rgba(10,185,230,0.07), transparent 60%);
+    }
+
+    .acard:hover { transform: translateY(-5px); border-color: rgba(10,185,230,0.4); }
+    .acard:hover::after { opacity: 1; }
+
+    /* colored top accent bar */
+    .acard-bar {
+      height: 4px;
+      border-radius: 2px;
+      margin-bottom: 1.5rem;
+    }
+    .bar-blue { background: linear-gradient(90deg, var(--sw-blue), #0060ff); }
+    .bar-red  { background: linear-gradient(90deg, var(--sw-red), #ff4444); }
+    .bar-mix  { background: linear-gradient(90deg, var(--sw-red), var(--sw-blue)); }
+
+    .acard-icon { font-size: 2rem; margin-bottom: 0.9rem; }
+    .acard h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .acard p  { font-size: 0.87rem; color: var(--sw-muted); line-height: 1.7; }
+
+    /* ─── FEATURES ────────────────────────────── */
+    #features {}
+
+    .feat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.1rem;
+      margin-top: 3rem;
+    }
+
+    .feat {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      background: var(--sw-card);
+      border: 1px solid var(--sw-border);
+      border-radius: 12px;
+      padding: 1.4rem;
+      transition: all .25s;
+    }
+
+    .feat:hover {
+      border-color: rgba(10,185,230,0.35);
+      background: var(--sw-card2);
+      transform: translateX(4px);
+    }
+
+    .feat-ico {
+      width: 42px; height: 42px;
+      border-radius: 10px;
+      background: rgba(10,185,230,0.1);
+      border: 1px solid rgba(10,185,230,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+
+    .feat h4 { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .feat p  { font-size: 0.82rem; color: var(--sw-muted); line-height: 1.6; }
+
+    /* ─── HOW IT WORKS ────────────────────────── */
+    #how { background: var(--sw-dark2); }
+
+    .how-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+
+    .hw-step {
+      background: var(--sw-card);
+      border: 1px solid var(--sw-border);
+      border-radius: 16px;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      transition: all .3s;
+      position: relative;
+    }
+
+    .hw-step:hover {
+      border-color: rgba(10,185,230,0.35);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    }
+
+    /* Connector line between steps */
+    .hw-step:not(:last-child)::after {
+      content: '→';
+      position: absolute;
+      right: -1.3rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--sw-border);
+      font-size: 1.2rem;
+      z-index: 1;
+    }
+
+    .step-num {
+      width: 50px; height: 50px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      font-weight: 900;
+      margin: 0 auto 1.2rem;
+      color: #fff;
+    }
+
+    .sn-1 { background: linear-gradient(135deg, var(--sw-red), #ff4d4d); box-shadow: 0 4px 16px rgba(230,0,18,0.4); }
+    .sn-2 { background: linear-gradient(135deg, var(--sw-blue), #0060ff); box-shadow: 0 4px 16px rgba(10,185,230,0.4); }
+    .sn-3 { background: linear-gradient(135deg, #f5a623, #ff7f00); box-shadow: 0 4px 16px rgba(245,166,35,0.4); }
+    .sn-4 { background: linear-gradient(135deg, var(--sw-green), #00b854); box-shadow: 0 4px 16px rgba(0,230,118,0.4); }
+
+    .hw-step .sw-tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.18rem 0.65rem;
+      border-radius: 100px;
+      margin-bottom: 0.7rem;
+      letter-spacing: 0.5px;
+    }
+    .tag-r { background: rgba(230,0,18,0.15); color: #ff6b6b; }
+    .tag-b { background: rgba(10,185,230,0.15); color: var(--sw-blue); }
+    .tag-o { background: rgba(245,166,35,0.15); color: #f5a623; }
+    .tag-g { background: rgba(0,230,118,0.15); color: var(--sw-green); }
+
+    .hw-step h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .hw-step p  { font-size: 0.83rem; color: var(--sw-muted); line-height: 1.6; }
+
+    /* ─── GALLERY ─────────────────────────────── */
+    #gallery {}
+
+    .gal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 1.2rem;
+      margin-top: 3rem;
+    }
+
+    .gal-item {
+      background: var(--sw-card);
+      border: 1px solid var(--sw-border);
+      border-radius: 14px;
+      overflow: hidden;
+      transition: all .3s;
+      cursor: pointer;
+    }
+
+    .gal-item:hover {
+      transform: translateY(-5px);
+      border-color: rgba(10,185,230,0.4);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+    }
+
+    .gal-thumb {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: var(--sw-dark);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Colored glow per tile */
+    .gal-thumb.gt-blue::before {
+      content:'';
+      position:absolute;
+      inset:0;
+      background: radial-gradient(circle at 50% 50%, rgba(10,185,230,0.12), transparent 70%);
+    }
+    .gal-thumb.gt-red::before {
+      content:'';
+      position:absolute;
+      inset:0;
+      background: radial-gradient(circle at 50% 50%, rgba(230,0,18,0.1), transparent 70%);
+    }
+    .gal-thumb.gt-green::before {
+      content:'';
+      position:absolute;
+      inset:0;
+      background: radial-gradient(circle at 50% 50%, rgba(0,230,118,0.1), transparent 70%);
+    }
+
+    .gal-thumb .gal-icon {
+      font-size: 2.8rem;
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(0 0 8px rgba(10,185,230,0.3));
+    }
+
+    .gal-thumb .gal-label {
+      font-size: 0.72rem;
+      color: var(--sw-muted);
+      position: relative;
+      z-index: 1;
+    }
+
+    .gal-cap {
+      padding: 0.9rem 1.1rem;
+    }
+    .gal-cap strong { display:block; font-size:0.88rem; margin-bottom:3px; }
+    .gal-cap span   { font-size:0.78rem; color: var(--sw-muted); }
+
+    /* ─── DOWNLOAD ────────────────────────────── */
+    #download {
+      background: var(--sw-dark2);
+      text-align: center;
+    }
+
+    .dl-box {
+      max-width: 700px;
+      margin: 3rem auto 0;
+      background: var(--sw-card);
+      border: 1px solid var(--sw-border);
+      border-radius: 20px;
+      padding: 3rem 2.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Switch-style top decoration */
+    .dl-box::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--sw-red) 0%, var(--sw-red) 50%, var(--sw-blue) 50%, var(--sw-blue) 100%);
+    }
+
+    .dl-version {
+      display: inline-block;
+      background: rgba(0,230,118,0.12);
+      color: var(--sw-green);
+      border: 1px solid rgba(0,230,118,0.25);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.2rem 0.8rem;
+      border-radius: 100px;
+      margin-bottom: 1.2rem;
+    }
+
+    .dl-box h3 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-bottom: 0.4rem;
+    }
+
+    .dl-sub {
+      color: var(--sw-muted);
+      font-size: 0.9rem;
+      margin-bottom: 1.8rem;
+    }
+
+    .dl-platforms {
+      display: flex;
+      gap: 0.9rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .dl-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--sw-dark);
+      border: 1.5px solid var(--sw-border);
+      color: var(--sw-text);
+      padding: 0.8rem 1.4rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 600;
+      transition: all .2s;
+    }
+
+    .dl-btn:hover {
+      border-color: var(--sw-blue);
+      color: var(--sw-blue);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(10,185,230,0.2);
+    }
+
+    .dl-btn .ico { font-size: 1.2rem; }
+
+    .dl-note {
+      margin-top: 1.5rem;
+      font-size: 0.75rem;
+      color: var(--sw-muted);
+      line-height: 1.6;
+      padding: 0.8rem 1rem;
+      background: rgba(230,0,18,0.06);
+      border: 1px solid rgba(230,0,18,0.15);
+      border-radius: 8px;
+    }
+
+    /* ─── FOOTER ──────────────────────────────── */
+    footer {
+      background: #0d1526;
+      border-top: 1px solid var(--sw-border);
+      padding: 3rem 2rem 2rem;
+    }
+
+    .foot-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    .foot-brand {
+      font-size: 1.3rem;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.5rem;
+    }
+
+    .foot-brand .n { color: var(--sw-blue); }
+    .foot-brand .x { color: var(--sw-red); }
+
+    .foot-tagline {
+      font-size: 0.83rem;
+      color: var(--sw-muted);
+      max-width: 320px;
+    }
+
+    .foot-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      list-style: none;
+      align-items: flex-end;
+    }
+
+    .foot-links a {
+      color: var(--sw-muted);
+      text-decoration: none;
+      font-size: 0.82rem;
+      transition: color .2s;
+    }
+
+    .foot-links a:hover { color: var(--sw-blue); }
+
+    .foot-copy {
+      max-width: 1100px;
+      margin: 1.5rem auto 0;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--sw-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .foot-copy p { font-size: 0.75rem; color: var(--sw-muted); }
+    .foot-copy .disc { font-size: 0.7rem; color: #3a4f6e; }
+
+    /* ─── ANIMATIONS ──────────────────────────── */
+    .fade {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    .fade.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ─── RESPONSIVE ──────────────────────────── */
+    @media (max-width: 900px) {
+      .hero-inner {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+      .hero-btns { justify-content: center; }
+      .hero-sub { margin-left: auto; margin-right: auto; }
+      .hero-visual { margin-top: 2rem; }
+      .how-steps { grid-template-columns: 1fr 1fr; }
+      .hw-step::after { display: none; }
+    }
+
+    @media (max-width: 640px) {
+      nav { padding: 0 1rem; }
+      .nav-links { display: none; }
+      .how-steps { grid-template-columns: 1fr; }
+      .foot-inner { grid-template-columns: 1fr; }
+      .foot-links { align-items: flex-start; }
+      .foot-copy { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">
+    <div class="logo-pill">N·E</div>
+    <span>NexoEmu</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#about">¿Qué es?</a></li>
+    <li><a href="#features">Características</a></li>
+    <li><a href="#how">Cómo funciona</a></li>
+    <li><a href="#gallery">Galería</a></li>
+    <li><a href="#download" class="nav-dl">⬇ Descargar</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-dots"></div>
+
+  <div class="hero-inner fade">
+    <!-- Text -->
+    <div class="hero-text">
+      <div class="hero-chip">
+        <div class="chip-dot"></div>
+        Raptor Network — En línea
+      </div>
+      <h1 class="hero-title">
+        <span class="ht-nexo">Nexo</span><span class="ht-emu">Emu</span>
+      </h1>
+      <p class="hero-sub">
+        El emulador de Nintendo Switch con <b>juego online real</b>.
+        Combina el motor moderno de <b>Eden</b> con la infraestructura
+        online de <b>Raptor Network</b> para que puedas jugar con amigos.
+      </p>
+      <div class="hero-btns">
+        <a href="#download" class="btn-red">⬇ Descargar gratis</a>
+        <a href="#about"    class="btn-outline">¿Qué es esto? →</a>
+      </div>
+    </div>
+
+    <!-- Console illustration -->
+    <div class="hero-visual">
+      <div class="switch-wrap">
+        <div class="online-badge">● ONLINE</div>
+        <div class="sw-console">
+          <!-- Left Joy-Con (red) -->
+          <div class="joycon joycon-l">
+            <div class="joycon-stick"></div>
+            <div class="joycon-btns">
+              <div class="joycon-btn btn-gray"></div>
+              <div class="joycon-btn btn-gray"></div>
+              <div class="joycon-btn btn-gray"></div>
+              <div class="joycon-btn btn-gray"></div>
+            </div>
+          </div>
+          <!-- Tablet Screen -->
+          <div class="sw-tablet">
+            <div class="sw-statusbar">
+              <span>NexoEmu</span>
+              <span>🔋 ● WIFI</span>
+            </div>
+            <div class="sw-screen">
+              <div class="sw-game-tile active">
+                <span class="tile-icon">🎮</span>
+              </div>
+              <div class="sw-game-tile">
+                <span class="tile-icon">⚔️</span>
+              </div>
+              <div class="sw-game-tile">
+                <span class="tile-icon">🏎️</span>
+              </div>
+              <div class="sw-game-tile">
+                <span class="tile-icon">⚽</span>
+              </div>
+              <div class="sw-game-tile">
+                <span class="tile-icon">🏹</span>
+              </div>
+              <div class="sw-game-tile">
+                <span class="tile-icon">🌟</span>
+              </div>
+              <div class="sw-game-tile">
+                <span class="tile-icon">🗡️</span>
+              </div>
+              <div class="sw-game-tile">
+                <span class="tile-icon">🐢</span>
+              </div>
+            </div>
+          </div>
+          <!-- Right Joy-Con (blue) -->
+          <div class="joycon joycon-r">
+            <div class="joycon-stick"></div>
+            <div class="joycon-btns">
+              <div class="joycon-btn btn-x"></div>
+              <div class="joycon-btn btn-a"></div>
+              <div class="joycon-btn btn-b"></div>
+              <div class="joycon-btn btn-y"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Signal rings -->
+        <div class="signal-ring">
+          <div class="ring"></div>
+          <div class="ring"></div>
+          <div class="ring"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ABOUT -->
+<section id="about">
+  <div class="s-inner">
+    <div class="fade">
+      <p class="s-label">¿Qué es NexoEmu?</p>
+      <h2>Un emulador construido para el<br><span style="color:var(--sw-blue)">juego online real</span></h2>
+      <p class="s-desc">
+        NexoEmu nació de la fusión de dos proyectos clave: el motor de emulación
+        moderno de <b>Eden</b> y el sistema de servidores online de <b>Raptor Network</b> (proveniente de RaptorCitrus).
+        El resultado es un emulador que puede autenticar cuentas reales y conectar a servidores online activos.
+      </p>
+    </div>
+    <div class="about-cards fade">
+      <div class="acard">
+        <div class="acard-bar bar-blue"></div>
+        <div class="acard-icon">⚡</div>
+        <h3>Motor Eden (2026)</h3>
+        <p>Eden es el fork de yuzu más actualizado del momento. Mejor rendimiento en Vulkan, mayor compatibilidad de juegos y actualizaciones constantes de la comunidad.</p>
+      </div>
+      <div class="acard">
+        <div class="acard-bar bar-red"></div>
+        <div class="acard-icon">🌐</div>
+        <h3>Raptor Network</h3>
+        <p>La infraestructura online de RaptorCitrus portada a Eden. Autentica tu cuenta con Bearer tokens y redirige las peticiones Nintendo hacia servidores online reales.</p>
+      </div>
+      <div class="acard">
+        <div class="acard-bar bar-mix"></div>
+        <div class="acard-icon">🔗</div>
+        <h3>Integración total NSD</h3>
+        <p>El servicio NSD (Nintendo Service Discovery) está hookeado para interceptar y redirigir automáticamente todo el tráfico de red hacia Raptor Network. Sin configuración extra.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="s-inner">
+    <div class="fade">
+      <p class="s-label">Características</p>
+      <h2>Todo lo que necesitas<br>para jugar <span style="color:var(--sw-red)">online</span></h2>
+      <p class="s-desc">NexoEmu no es solo un emulador. Es una plataforma completa para el juego online en Nintendo Switch.</p>
+    </div>
+    <div class="feat-grid fade">
+      <div class="feat">
+        <div class="feat-ico">🔐</div>
+        <div>
+          <h4>Autenticación con token</h4>
+          <p>Inicia sesión con tu token de Raptor Network. Soporte completo de Bearer tokens para acceso seguro y verificado.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico">👥</div>
+        <div>
+          <h4>Lista de amigos real</h4>
+          <p>Ve quién está en línea, a qué juego está jugando, envía solicitudes de amistad y gestiona tu lista completa.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico">🔔</div>
+        <div>
+          <h4>Notificaciones en tiempo real</h4>
+          <p>Alertas instantáneas vía WebSocket cuando un amigo se conecta, te invita a jugar o envía una solicitud.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico">🖥️</div>
+        <div>
+          <h4>Hardware ID único</h4>
+          <p>ID de dispositivo generado con OpenSSL que persiste entre sesiones. Compatible con Windows, Linux y macOS.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico">📡</div>
+        <div>
+          <h4>Redirección DNS automática</h4>
+          <p>Todas las peticiones a Nintendo son interceptadas y redirigidas transparentemente a Raptor Network.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico">📊</div>
+        <div>
+          <h4>Monitor de estado online</h4>
+          <p>Indicador visual en tiempo real: Conectado, Sin sesión, Mantenimiento, Ban temporal o permanente.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico">👤</div>
+        <div>
+          <h4>Perfil de usuario</h4>
+          <p>Personaliza tu nombre de usuario y avatar. Los cambios se sincronizan con los servidores de Raptor Network.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-ico">🎯</div>
+        <div>
+          <h4>Compatibilidad Eden</h4>
+          <p>Todos los juegos compatibles con Eden funcionan en NexoEmu. El online no afecta la compatibilidad existente.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="s-inner">
+    <div class="fade">
+      <p class="s-label">¿Cómo funciona?</p>
+      <h2>Conéctate a Raptor Network<br>en <span style="color:var(--sw-blue)">4 pasos</span></h2>
+      <p class="s-desc">Estar online con NexoEmu es más sencillo de lo que parece.</p>
+    </div>
+    <div class="how-steps fade">
+      <div class="hw-step">
+        <div class="step-num sn-1">1</div>
+        <span class="sw-tag tag-r">Instalación</span>
+        <h4>Descarga NexoEmu</h4>
+        <p>Descarga la versión para tu sistema operativo e instálala como cualquier programa.</p>
+      </div>
+      <div class="hw-step">
+        <div class="step-num sn-2">2</div>
+        <span class="sw-tag tag-b">Cuenta</span>
+        <h4>Obtén tu token</h4>
+        <p>Regístrate en <b style="color:var(--sw-blue)">nexonetwork.space</b> y copia tu token desde el panel de usuario.</p>
+      </div>
+      <div class="hw-step">
+        <div class="step-num sn-3">3</div>
+        <span class="sw-tag tag-o">Configuración</span>
+        <h4>Configura el token</h4>
+        <p>En NexoEmu ve a <em>Configuración → Raptor Network</em>, pega tu token y presiona Conectar.</p>
+      </div>
+      <div class="hw-step">
+        <div class="step-num sn-4">4</div>
+        <span class="sw-tag tag-g">¡Listo!</span>
+        <h4>¡A jugar online!</h4>
+        <p>El monitor mostrará <b style="color:var(--sw-green)">● Conectado</b>. Lanza tu juego y disfruta del online.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- GALLERY -->
+<section id="gallery">
+  <div class="s-inner">
+    <div class="fade">
+      <p class="s-label">Galería</p>
+      <h2>NexoEmu en <span style="color:var(--sw-blue)">acción</span></h2>
+      <p class="s-desc">Mira las funciones online en funcionamiento dentro del emulador.</p>
+    </div>
+    <div class="gal-grid fade">
+      <div class="gal-item">
+        <div class="gal-thumb gt-blue">
+          <div class="gal-icon">🎮</div>
+          <span class="gal-label">Pantalla principal</span>
+        </div>
+        <div class="gal-cap">
+          <strong>Interfaz de NexoEmu</strong>
+          <span>Diseño limpio con acceso rápido al estado online</span>
+        </div>
+      </div>
+      <div class="gal-item">
+        <div class="gal-thumb gt-red">
+          <div class="gal-icon">👥</div>
+          <span class="gal-label">Amigos online</span>
+        </div>
+        <div class="gal-cap">
+          <strong>Lista de amigos en tiempo real</strong>
+          <span>Ve quién está jugando y a qué juego</span>
+        </div>
+      </div>
+      <div class="gal-item">
+        <div class="gal-thumb gt-blue">
+          <div class="gal-icon">⚙️</div>
+          <span class="gal-label">Configuración Raptor</span>
+        </div>
+        <div class="gal-cap">
+          <strong>Panel de Raptor Network</strong>
+          <span>Ajusta tu token y opciones de cuenta fácilmente</span>
+        </div>
+      </div>
+      <div class="gal-item">
+        <div class="gal-thumb gt-green">
+          <div class="gal-icon">📡</div>
+          <span class="gal-label">Monitor de conexión</span>
+        </div>
+        <div class="gal-cap">
+          <strong>Estado online en tiempo real</strong>
+          <span>Indicador visual del estado de Raptor Network</span>
+        </div>
+      </div>
+      <div class="gal-item">
+        <div class="gal-thumb gt-red">
+          <div class="gal-icon">🔔</div>
+          <span class="gal-label">Notificaciones</span>
+        </div>
+        <div class="gal-cap">
+          <strong>Sistema de notificaciones</strong>
+          <span>Alertas instantáneas de actividad de amigos</span>
+        </div>
+      </div>
+      <div class="gal-item">
+        <div class="gal-thumb gt-blue">
+          <div class="gal-icon">🏆</div>
+          <span class="gal-label">Partida online</span>
+        </div>
+        <div class="gal-cap">
+          <strong>Juego multijugador real</strong>
+          <span>Partidas online a través de Raptor Network</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- DOWNLOAD -->
+<section id="download">
+  <div class="s-inner">
+    <div class="fade" style="text-align:center;">
+      <p class="s-label">Descarga</p>
+      <h2>Empieza a jugar online <span style="color:var(--sw-red)">hoy</span></h2>
+      <p class="s-desc" style="margin:0.75rem auto 0;">
+        NexoEmu es gratuito y de código abierto. Disponible para Windows, Linux y macOS.
+      </p>
+    </div>
+    <div class="dl-box fade">
+      <div class="dl-version">● Versión 1.0.0 — Estable</div>
+      <h3>Descarga NexoEmu</h3>
+      <p class="dl-sub">Elige tu sistema operativo</p>
+      <div class="dl-platforms">
+        <a href="#" class="dl-btn"><span class="ico">🪟</span> Windows (x64)</a>
+        <a href="#" class="dl-btn"><span class="ico">🐧</span> Linux (AppImage)</a>
+        <a href="#" class="dl-btn"><span class="ico">🍎</span> macOS</a>
+        <a href="#" class="dl-btn"><span class="ico">💻</span> Código fuente</a>
+      </div>
+      <div class="dl-note">
+        ⚠️ Necesitas tus propias <strong>ROMs y archivos de sistema</strong> de Nintendo Switch.
+        Asegúrate de cumplir con las leyes de tu país respecto a la emulación.
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- FOOTER -->
+<footer>
+  <div class="foot-inner">
+    <div>
+      <div class="foot-brand"><span class="n">Nexo</span><span class="x">Emu</span></div>
+      <p class="foot-tagline">
+        El emulador Nintendo Switch con online real,<br>
+        impulsado por Eden y Raptor Network.
+      </p>
+    </div>
+    <ul class="foot-links">
+      <li><a href="#about">¿Qué es?</a></li>
+      <li><a href="#features">Características</a></li>
+      <li><a href="#how">Cómo funciona</a></li>
+      <li><a href="#gallery">Galería</a></li>
+      <li><a href="#download">Descargar</a></li>
+      <li><a href="https://nexonetwork.space">Nexo Network</a></li>
+    </ul>
+  </div>
+  <div class="foot-copy">
+    <p>© 2026 NexoEmu Project — Código abierto bajo licencia GPL-3.0</p>
+    <p class="disc">NexoEmu no está afiliado con Nintendo Co., Ltd. Nintendo Switch es marca registrada de Nintendo.</p>
+  </div>
+</footer>
+
+<script>
+  // Scroll animations
+  const obs = new IntersectionObserver(els => {
+    els.forEach(e => { if (e.isIntersecting) e.target.classList.add('show'); });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.fade').forEach(el => obs.observe(el));
+
+  // Smooth scroll
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const t = document.querySelector(a.getAttribute('href'));
+      if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth' }); }
+    });
+  });
+
+  // Trigger hero immediately
+  document.querySelector('.hero .fade')?.classList.add('show');
+</script>
+</body>
+</html>

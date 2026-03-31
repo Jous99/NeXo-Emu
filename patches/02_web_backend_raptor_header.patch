@@ -1,0 +1,17 @@
+// ============================================================
+// PATCH 02: Agregar header R-HardwareId al web_backend de Eden
+// ============================================================
+// Archivo a modificar: src/web_service/web_backend.cpp
+//
+// INSTRUCCIONES:
+// 1. Agregar este include al inicio del archivo:
+//    #include "common/hardware_id.h"
+//
+// 2. Buscar donde se construyen los headers HTTP (la funcion GenericRequest
+//    o donde se crean httplib::Headers) y agregar:
+//
+//    params.emplace("R-HardwareId", Common::GetRaptorHardwareID());
+//    params.emplace("R-ClientId", "nexoemu");
+//
+// Esto asegura que TODAS las peticiones web incluyan el hardware ID
+// para autenticacion con Raptor Network.

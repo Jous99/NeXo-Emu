@@ -1,0 +1,32 @@
+// ============================================================
+// PATCH 04: Integrar Raptor URL Resolver en el servicio NSD de Eden
+// ============================================================
+// Archivo a modificar: src/core/hle/service/sockets/nsd.cpp
+//
+// El servicio NSD (Nintendo Service Discovery) es el que resuelve
+// los hostnames de los servidores online de Switch.
+// Necesitamos que use nuestro OnlineInitiator para redirigir las URLs.
+//
+// INSTRUCCIONES:
+//
+// 1. Agregar includes al inicio de nsd.cpp:
+//    #include "core/online_initiator.h"
+//
+// 2. Buscar la funcion que resuelve DNS/hostnames (algo como
+//    Resolve, ResolveEx, o GetAddress).
+//
+// 3. ANTES de que haga la resolucion normal, agregar:
+//
+//    // Intentar resolver via Raptor Network primero
+//    // Esto redirige las URLs de Nintendo a los servidores de Raptor
+//    if (system.GetOnlineInitiator()) {
+//        auto resolved = system.GetOnlineInitiator()->ResolveUrl(hostname, true);
+//        if (resolved != hostname) {
+//            // La URL fue reescrita por Raptor Network
+//            LOG_INFO(Network, "NSD: Raptor resolved '{}' -> '{}'", hostname, resolved);
+//            // Usar 'resolved' como el hostname
+//        }
+//    }
+//
+// NOTA: Para esto, necesitas que Core::System tenga acceso al OnlineInitiator.
+// Ver patch 05 para agregar OnlineInitiator a Core::System.

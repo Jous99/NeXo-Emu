@@ -1,0 +1,66 @@
+// ============================================================
+// PATCH 06: Agregar archivos de RaptorNetwork al build de Eden
+// ============================================================
+//
+// Hay que modificar TRES CMakeLists.txt para incluir los nuevos archivos.
+//
+// ============================================================
+// A) src/common/CMakeLists.txt
+// ============================================================
+// Agregar estos archivos a la lista de sources de la libreria "common":
+//
+//    hardware_id.h
+//    hardware_id.cpp
+//
+// Ejemplo: buscar donde estan los otros .h/.cpp y agregar:
+//    hardware_id.cpp
+//    hardware_id.h
+//
+// ============================================================
+// B) src/core/CMakeLists.txt
+// ============================================================
+// Agregar estos archivos a la lista de sources de la libreria "core":
+//
+//    online_initiator.h
+//    online_initiator.cpp
+//
+// Tambien agregar la dependencia a httplib si no existe:
+//    target_link_libraries(core PRIVATE httplib::httplib)
+//
+// Y la dependencia a nlohmann_json si no existe:
+//    target_link_libraries(core PRIVATE nlohmann_json::nlohmann_json)
+//
+// ============================================================
+// C) src/yuzu/CMakeLists.txt
+// ============================================================
+// Agregar los nuevos archivos de UI online:
+//
+//    online/types.h
+//    online/monitor.h
+//    online/monitor.cpp
+//    online/notification_queue.h
+//    online/notification_queue.cpp
+//    configuration/configure_raptor_online.h
+//    configuration/configure_raptor_online.cpp
+//
+// ============================================================
+// D) Dependencia httplib
+// ============================================================
+// Si Eden no incluye httplib en externals/, hay que agregarla.
+//
+// Opcion 1: Usar CPM (el gestor de paquetes que usa Eden):
+//   En cpmfile.json agregar:
+//   {
+//     "name": "httplib",
+//     "version": "0.15.3",
+//     "github_repository": "yhirose/cpp-httplib"
+//   }
+//
+// Opcion 2: Copiar httplib.h de RaptorCitrus:
+//   cp RaptorCitrus/externals/httplib/httplib.h eden/externals/httplib/httplib.h
+//   Y agregar al CMakeLists.txt raiz o de externals:
+//   add_library(httplib INTERFACE)
+//   target_include_directories(httplib INTERFACE externals/httplib)
+//
+// NOTA: httplib requiere OpenSSL para HTTPS. Eden ya tiene OpenSSL
+// como dependencia para SSL, asi que deberia funcionar.
