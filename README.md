@@ -1,6 +1,6 @@
 <div align="center">
   <h1>NeXoEmu</h1>
-  <p><strong>Nintendo Switch Emulator with Raptor Network Online Support</strong></p>
+  <p><strong>Nintendo Switch Emulator with NeXo Network Online Support</strong></p>
 </div>
 
 ---
