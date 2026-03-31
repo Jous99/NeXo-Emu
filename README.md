@@ -26,11 +26,11 @@
 - Active development and bug fixes
 
 ### Added by NeXoEmu (Raptor Network integration)
-- **Online authentication** — log in with your Raptor Network token
+- **Online authentication** — log in with your NeXoNetwork token
 - **Hardware ID** — secure per-machine identification for account binding
-- **URL rewriting** — transparent redirection of Nintendo servers to Raptor Network
+- **URL rewriting** — transparent redirection of Nintendo servers to NeXoNetwork
 - **FQDN resolver** — blocks Nintendo server connections, routes to Raptor endpoints
-- **Subscription info** — displays your Raptor Network subscription status
+- **Subscription info** — displays your NeXoNetwork subscription status
 - **Friends system** — see your friends list, send/accept requests
 - **Notifications** — real-time alerts for friend requests and game invites
 - **BCAT** — game content delivery via Raptor's servers
