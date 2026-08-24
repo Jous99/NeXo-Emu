@@ -1,110 +1,150 @@
-# Citron Neo — NeXo Network / NZ:P Edition
+<div align="center">
 
-A fork of the [Citron](https://git.citron-emu.org/citron/emu) with two
-purposes:
+# NeXo-emu
 
-1. **NeXo Network online play** — connect a NeXo Network account and play supported titles
-   online from Citron, without hosts-file edits, external DNS, or manual SSL bypass.
-2. **Nazi Zombies: Portable (Emulator Edition)** — the emulator-side fixes this fork was
-   originally created for, and still carries.
+**A Nintendo Switch emulator with the NeXo Network online layer built in.**
+Play supported titles online against your own NeXo server — no hosts-file edits, no external DNS, no manual certificate tricks.
 
-> [!WARNING]
-> **This is a work in progress. Expect bugs.**
->
-> Online support is new, incomplete, and only lightly tested — largely by one person, on one
-> machine, against multiple games. Things will break. If you hit a problem, please
-> **[open an issue](../../issues)** and include:
->
-> - your `citron_log.txt` (Linux: `~/.local/share/citron/log/citron_log.txt`)
-> - the exact error code the game showed, if any (e.g. `2306-0802`)
-> - the game, its version, and what you were doing when it failed
->
-> A log makes the difference between a fixable report and a guess. For network problems, set the
-> log filter to `*:Info Service:Debug Service.SSL:Debug WebService:Debug` before reproducing.
+[![License](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)]()
+[![Status](https://img.shields.io/badge/status-work%20in%20progress-yellow)]()
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational)]()
+
+[English](#english) · [Español](#español)
+
+</div>
 
 ---
 
-## Status
+<a name="english"></a>
+## English
 
-Verified working: All officially supported titles.
+### What is NeXo-emu?
 
-| | |
+NeXo-emu is a build of the Citron emulator (in the yuzu / Citra lineage) with one thing added on top: a first-class client for **[NeXo Network](https://nexonetwork.space)**, the open-source, community-run alternative to the console's official online services. Where a normal setup would need you to edit a hosts file, run a DNS proxy and disable certificate checks by hand, NeXo-emu does all of that internally — you enter a server address, sign in, and play.
+
+It is meant for **learning, preservation and experimentation**. It ships no games, no firmware and no keys; you bring your own dumped content.
+
+### Online, at a glance
+
+| Area | What works |
 | --- | --- |
-| Account sign-in | Browser-based, OAuth loopback + PKCE — the emulator never sees your password |
-| Hostname redirection | Nintendo online hostnames resolve to the configured NeXo servers |
-| TLS | Handshake with recovered SNI, ALPN pinned to HTTP/1.1 |
-| Auth + secure server | Kerberos ticket, matchmaking, session entry |
-| NAT check | Both vantage points, sub-second |
-| Peer-to-peer | Hole-punching, races completed |
-| Play-time sync | Pushed to your NeXo profile on game exit |
-| Presence | Published on sign-in and game start/stop |
-| Profile name | Local Switch profile renamed to your account nickname |
+| **Sign-in** | Browser-based OAuth on loopback — the emulator never handles your password |
+| **Redirection** | Official online hostnames are resolved to your NeXo server, internally |
+| **TLS** | Handshake completed against the NeXo certificate, no manual bypass needed |
+| **Authentication** | Device/account tickets and secure-server entry |
+| **Matchmaking** | Session join and NAT traversal between peers |
+| **Presence** | Online status published on sign-in and when a game starts/stops |
+| **Profile** | Avatar and nickname synced from your NeXo account |
 
-## Setup
+> **Heads-up:** online support is young and only lightly tested. Expect rough edges. Bug reports with a log attached are worth ten without one.
 
-1. Build as you would upstream Citron (see `docs/`), or use a release build.
-2. Open the **NeXo** menu and click **Enable Network Redirection**. It's off by default; the
-   server addresses are already filled in, so there's nothing to type.
-3. Still in the **NeXo** menu, click **Sign In** and complete sign-in in your browser.
-4. Launch a supported game and enter its online mode.
+### Quick start
 
-`NEXO_SERVER_IP`, `NEXO_NAT_IP` and `NEXO_API` are honoured as environment overrides
-if you need to point at something other than the default servers; the API override only accepts
-loopback or HTTPS on the NeXo domain, because those requests carry your account token.
+1. Grab a release build, or compile it yourself (see *Building*).
+2. Open **Settings → Network** and turn on the NeXo network layer.
+3. In the same panel, set the **server address** to your NeXo server (leave the default empty field pointing wherever your server lives).
+4. Sign in through the browser window that opens.
+5. Launch a supported game and enter its online mode.
 
-**Friends, requests, and recently played** live under **NeXo → Open Account Page** — add by
-friend code, accept or decline requests, see who's online.
+### Building
 
-> [!CAUTION]
-> Your Network ID (PID) is effectively a credential on this network: the service accepts a bare PID
-> as an identity. This fork deliberately never displays or logs it. Don't paste it anywhere, and
-> don't ship `nexo_account.txt` — it holds your session token — inside a build or archive.
+NeXo-emu builds exactly like upstream Citron; nothing in the online layer changes the toolchain. In short:
 
-## Credits and how this was built
+- **Windows:** Visual Studio 2022 (or newer) with the C++ workload, CMake and Ninja. The CI workflow under `.github/workflows/` is the reference build.
+- **Linux:** a recent Clang or GCC, CMake, Ninja and the Qt 6 / Vulkan development packages.
 
-This is [Citron](https://git.citron-emu.org/citron/emu), itself derived from
-[yuzu](https://github.com/yuzu-emu/yuzu). All emulation — CPU, GPU, audio, input, filesystem — is
-theirs. This fork's changes are confined to the networking and account layers plus the surrounding
-UI.
+Dependencies are fetched automatically at configure time. The full, always-up-to-date steps live in [`docs/`](docs/).
 
-The NeXo Network client behaviour was worked out by **studying the reference implementation**,
-[Ryujinx-NeXo](https://github.com/NeXoNetwork/Ryujinx-NeXo), together with the
-[published server sources](https://github.com/NeXoNetwork) — which document the protocol, the
-endpoints, and the reasons behind a number of non-obvious decisions far better than black-box
-guessing ever would. Credit where it is due: several fixes here exist because their comments
-explained *why* something was necessary.
+### Configuration
 
-**No code from that project is copied into this one.** It could not be: it is licensed under
-PolyForm Shield 1.0.0, which is incompatible with Citron's GPL. Everything here is an independent
-C++ implementation written against Citron's own IPC, socket, TLS and configuration layers, which
-differ substantially from Ryujinx's. Where the two diverge, it is deliberate:
+The server the emulator talks to is a plain setting — you never recompile to change it:
 
-Also referenced: [Kinnay's NintendoClients](https://github.com/kinnay/NintendoClients) for NEX and
-error-code documentation, and [switchbrew](https://switchbrew.org) for service definitions.
+- **Settings → Network** holds the NeXo toggle, the **server address** and the **NAT server address**.
+- For scripting or CI, the equivalent environment overrides are read at startup if present.
 
-## Security
+Because those requests carry your account token, the API override only accepts a loopback address or an HTTPS address on your own NeXo domain.
 
-- **Sign-in never touches your password.** It's browser-based OAuth loopback + PKCE — the
-  emulator only ever sees a short-lived session token, never your credentials.
-- **Your Network ID (PID) is never displayed or logged.** It functions as a bearer credential on
-  this network, so this fork deliberately keeps it out of the UI and out of `citron_log.txt`.
-- **Peer IP addresses are redacted in logs.** Connection logs (socket bind/connect/send/receive,
-  and room join/leave/kick/ban events) mask the address before it's written, so a log file pasted
-  into a bug report or Discord doesn't hand out another player's IP.
-- **Redirection is off by default.** It only activates once you explicitly enable it from the
-  NeXo menu — an unconfigured toggle behaves like stock Citron.
-- **The API override is restricted to loopback or HTTPS on the NeXo domain**, since that
-  request carries your account token.
-- Your session token lives in `nexo_account.txt` — don't share it or ship it inside a build or
-  archive.
+### When something breaks
 
-## Legal
+Attach a log. On Linux the log lives at `~/.local/share/citron/log/`, on Windows under the emulator's `log` folder. For network problems specifically, raise the log detail on the networking and SSL modules before you reproduce the issue, and include the on-screen error code if the game showed one.
 
-Licensed **GPL-3.0-or-later**, as required by Citron. See [LICENSE](LICENSE).
+### Credits & license
 
-This project ships no Nintendo code, keys, firmware or games, and is not affiliated with, endorsed
-by, or associated with Nintendo. You must supply your own legally dumped games and system files,
-exactly as with upstream Citron. "Nintendo Switch" and all game titles are trademarks of their
-respective owners.
+NeXo-emu is a **modified version** of the Citron emulator, itself derived from yuzu and Citra. All original copyright headers are kept intact. NeXo Network's changes are limited to the online client and its integration. See [`NOTICE.md`](NOTICE.md) for attribution and [`LICENSE`](LICENSE) for the full terms.
 
-NeXo Network is a community-run service, independent of this fork and of Nintendo.
+Released under **GPL-2.0-or-later**.
+
+### Legal
+
+NeXo-emu is an **educational, non-profit** project. It is not affiliated with, endorsed by, or associated with Nintendo or any other company, and it distributes no copyrighted material. You are responsible for owning the content you use. Use of this software is at your own risk.
+
+---
+
+<a name="español"></a>
+## Español
+
+### ¿Qué es NeXo-emu?
+
+NeXo-emu es una compilación del emulador Citron (de la familia yuzu / Citra) con una cosa añadida encima: un cliente completo para **[NeXo Network](https://nexonetwork.space)**, la alternativa de código abierto y comunitaria a los servicios online oficiales de la consola. Donde una configuración normal te obligaría a editar un fichero hosts, montar un proxy de DNS y desactivar a mano la verificación de certificados, NeXo-emu hace todo eso por dentro: pones una dirección de servidor, inicias sesión y juegas.
+
+Está pensado para **aprender, conservar y experimentar**. No incluye juegos, ni firmware, ni claves; el contenido lo aportas tú desde tu propia consola.
+
+### El online, de un vistazo
+
+| Área | Qué funciona |
+| --- | --- |
+| **Inicio de sesión** | OAuth en el navegador sobre loopback — el emulador nunca ve tu contraseña |
+| **Redirección** | Los dominios online oficiales se resuelven a tu servidor NeXo, por dentro |
+| **TLS** | Handshake completo contra el certificado de NeXo, sin trucos manuales |
+| **Autenticación** | Tickets de dispositivo/cuenta y entrada al servidor seguro |
+| **Emparejamiento** | Unión a sesión y travesía de NAT entre jugadores |
+| **Presencia** | Estado en línea al iniciar sesión y al arrancar/cerrar un juego |
+| **Perfil** | Avatar y apodo sincronizados desde tu cuenta NeXo |
+
+> **Aviso:** el soporte online es reciente y está poco probado. Habrá fallos. Un reporte de bug con un log adjunto vale por diez sin él.
+
+### Empezar rápido
+
+1. Descarga una *release*, o compílala tú mismo (ver *Compilar*).
+2. Abre **Settings → Network** y activa la capa de red de NeXo.
+3. En ese mismo panel, pon la **dirección del servidor** apuntando a tu servidor NeXo (el campo viene vacío por defecto).
+4. Inicia sesión en la ventana del navegador que se abre.
+5. Arranca un juego compatible y entra en su modo online.
+
+### Compilar
+
+NeXo-emu se compila igual que el Citron original; la capa online no cambia nada del *toolchain*. En resumen:
+
+- **Windows:** Visual Studio 2022 (o superior) con el paquete de C++, CMake y Ninja. El *workflow* de CI en `.github/workflows/` es la referencia de compilación.
+- **Linux:** un Clang o GCC reciente, CMake, Ninja y los paquetes de desarrollo de Qt 6 / Vulkan.
+
+Las dependencias se descargan solas al configurar. Los pasos completos y siempre actualizados están en [`docs/`](docs/).
+
+### Configuración
+
+El servidor con el que habla el emulador es un simple ajuste — no recompilas para cambiarlo:
+
+- **Settings → Network** tiene el interruptor de NeXo, la **dirección del servidor** y la **dirección del servidor de NAT**.
+- Para scripts o CI, se leen al arrancar las variables de entorno equivalentes si están definidas.
+
+Como esas peticiones llevan el token de tu cuenta, la sobreescritura de la API solo acepta una dirección de loopback o una dirección HTTPS de tu propio dominio NeXo.
+
+### Cuando algo falla
+
+Adjunta un log. En Linux está en `~/.local/share/citron/log/`, en Windows en la carpeta `log` del emulador. Para problemas de red, sube el nivel de detalle del log en los módulos de red y SSL antes de reproducir el fallo, e incluye el código de error que muestre el juego si lo hay.
+
+### Créditos y licencia
+
+NeXo-emu es una **versión modificada** del emulador Citron, que a su vez deriva de yuzu y Citra. Se conservan intactas todas las cabeceras de copyright originales. Los cambios de NeXo Network se limitan al cliente online y su integración. Consulta [`NOTICE.md`](NOTICE.md) para la atribución y [`LICENSE`](LICENSE) para los términos completos.
+
+Publicado bajo **GPL-2.0-or-later**.
+
+### Aviso legal
+
+NeXo-emu es un proyecto **educativo y sin ánimo de lucro**. No está afiliado, respaldado ni asociado con Nintendo ni ninguna otra empresa, y no distribuye ningún material con derechos de autor. Eres responsable de poseer el contenido que utilices. El uso de este software es responsabilidad tuya.
+
+---
+
+<div align="center">
+<sub>NeXo Network · Open Source · GPL-2.0-or-later</sub>
+</div>
