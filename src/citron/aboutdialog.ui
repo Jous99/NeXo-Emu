@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AboutDialog</class>
+ <widget class="QDialog" name="AboutDialog">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>620</width><height>300</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>About citron-neo: The switch fell off</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainVerticalLayout">
+   <property name="spacing"><number>12</number></property>
+   <property name="leftMargin"><number>12</number></property>
+   <property name="topMargin"><number>12</number></property>
+   <property name="rightMargin"><number>12</number></property>
+   <property name="bottomMargin"><number>12</number></property>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,1">
+     <item>
+      <layout class="QVBoxLayout" name="logoColumn">
+       <item>
+        <widget class="QLabel" name="labelLogo">
+         <property name="minimumSize"><size><width>160</width><height>160</height></size></property>
+         <property name="text"><string/></property>
+         <property name="scaledContents"><bool>true</bool></property>
+         <property name="alignment"><set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set></property>
+        </widget>
+       </item>
+       <item><spacer name="vS1"><property name="orientation"><enum>Qt::Vertical</enum></property></spacer></item>
+      </layout>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="textColumn">
+       <property name="spacing"><number>6</number></property>
+       <item>
+        <widget class="QLabel" name="labelCitron">
+         <property name="text">
+          <string>&lt;html&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:28pt; font-weight:600;&quot;&gt;citron&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelBuildInfo">
+         <property name="text"><string>&lt;html&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:10pt; color:#888888;&quot;&gt;%1 (%2)&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelAbout">
+         <property name="text">
+          <string>citron is an experimental open-source emulator for the Nintendo Switch licensed under GPLv3.0+. This software should not be used to play games you have not legally obtained.</string>
+         </property>
+         <property name="wordWrap"><bool>true</bool></property>
+        </widget>
+       </item>
+       <item><spacer name="vS2"><property name="orientation"><enum>Qt::Vertical</enum></property></spacer></item>
+       <item>
+        <widget class="QLabel" name="labelLinks">
+         <property name="text">
+          <string>&lt;a href=&quot;https://citron-neo.org/&quot;&gt;Website&lt;/a&gt; | &lt;a href=&quot;https://git.citron-neo.org/citron/emulator&quot;&gt;Source&lt;/a&gt; | &lt;a href=&quot;https://git.citron-emu.org/&quot;&gt;Commits&lt;/a&gt;</string>
+         </property>
+         <property name="openExternalLinks"><bool>true</bool></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelLiability">
+         <property name="text">
+          <string>&lt;span style=&quot; font-size:8pt; color:#777777;&quot;&gt;Nintendo Switch is a trademark of Nintendo. citron is not affiliated with Nintendo.&lt;/span&gt;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="standardButtons"><set>QDialogButtonBox::Ok</set></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>AboutDialog</receiver>
+   <slot>accept()</slot>
+  </connection>
+ </connections>
+</ui>

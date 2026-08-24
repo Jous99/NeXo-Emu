@@ -1,0 +1,150 @@
+// SPDX-FileCopyrightText: Copyright 2023 yuzu Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "core/core.h"
+#include "core/debugger/debugger.h"
+#include "core/hle/kernel/k_process.h"
+#include "core/hle/kernel/k_thread.h"
+#include "core/hle/kernel/svc.h"
+#include "core/hle/kernel/svc_types.h"
+#include "core/memory.h"
+#include "core/reporter.h"
+
+namespace Kernel::Svc {
+
+/// Break program execution
+void Break(Core::System& system, BreakReason reason, u64 info1, u64 info2) {
+    BreakReason break_reason =
+        reason & static_cast<BreakReason>(~BreakReason::NotificationOnlyFlag);
+    bool notification_only = True(reason & BreakReason::NotificationOnlyFlag);
+
+    bool has_dumped_buffer{};
+    std::vector<u8> debug_buffer;
+
+    const auto handle_debug_buffer = [&]() {
+        if (has_dumped_buffer) {
+            return;
+        }
+        has_dumped_buffer = true;
+    };
+
+    const auto& current_process = GetCurrentProcess(system.Kernel());
+    const bool is_hbl = current_process.IsHbl();
+    const bool is_application = current_process.IsApplication();
+
+    // Only attempt crash recovery for application processes, never for system
+    // applets or the homebrew loader — those crashes are unrecoverable and
+    // forcing continuation creates infinite fault loops.
+    const auto try_recover = [&]() {
+        if (!is_application || is_hbl) {
+            return;
+        }
+
+        if (break_reason == BreakReason::Panic && info1 < 0x1000) {
+            LOG_INFO(Debug_Emulated, "UE4 low-address panic, treating as recoverable");
+            notification_only = true;
+        }
+
+        if (break_reason == BreakReason::Assert) {
+            LOG_INFO(Debug_Emulated, "Application assertion failure, attempting recovery");
+            notification_only = true;
+        }
+    };
+
+    switch (break_reason) {
+    case BreakReason::Panic:
+        LOG_CRITICAL(Debug_Emulated, "Userspace PANIC! info1=0x{:016X}, info2=0x{:016X}", info1,
+                     info2);
+        handle_debug_buffer();
+        try_recover();
+        break;
+    case BreakReason::Assert:
+        LOG_CRITICAL(Debug_Emulated, "Userspace Assertion failed! info1=0x{:016X}, info2=0x{:016X}",
+                     info1, info2);
+        handle_debug_buffer();
+        try_recover();
+        break;
+    case BreakReason::User:
+        LOG_WARNING(Debug_Emulated, "Userspace Break! 0x{:016X} with size 0x{:016X}", info1, info2);
+        handle_debug_buffer();
+        break;
+    case BreakReason::PreLoadDll:
+        LOG_INFO(Debug_Emulated,
+                 "Userspace Attempting to load an NRO at 0x{:016X} with size 0x{:016X}", info1,
+                 info2);
+        break;
+    case BreakReason::PostLoadDll:
+        LOG_INFO(Debug_Emulated, "Userspace Loaded an NRO at 0x{:016X} with size 0x{:016X}", info1,
+                 info2);
+        break;
+    case BreakReason::PreUnloadDll:
+        LOG_INFO(Debug_Emulated,
+                 "Userspace Attempting to unload an NRO at 0x{:016X} with size 0x{:016X}", info1,
+                 info2);
+        break;
+    case BreakReason::PostUnloadDll:
+        LOG_INFO(Debug_Emulated, "Userspace Unloaded an NRO at 0x{:016X} with size 0x{:016X}",
+                 info1, info2);
+        break;
+    case BreakReason::CppException:
+        LOG_CRITICAL(Debug_Emulated, "Signalling debugger. Uncaught C++ exception encountered.");
+        break;
+    default:
+        LOG_WARNING(
+            Debug_Emulated,
+            "Signalling debugger, Unknown break reason {:#X}, info1=0x{:016X}, info2=0x{:016X}",
+            reason, info1, info2);
+        handle_debug_buffer();
+        break;
+    }
+
+    system.GetReporter().SaveSvcBreakReport(
+        static_cast<u32>(reason), notification_only, info1, info2,
+        has_dumped_buffer ? std::make_optional(debug_buffer) : std::nullopt);
+
+    if (!notification_only) {
+        LOG_CRITICAL(
+            Debug_Emulated,
+            "Emulated program broke execution! reason=0x{:016X}, info1=0x{:016X}, info2=0x{:016X}",
+            reason, info1, info2);
+
+        handle_debug_buffer();
+
+        system.CurrentPhysicalCore().LogBacktrace();
+    }
+
+    const bool should_break = is_hbl || !notification_only;
+
+    if (should_break && !is_hbl) {
+        auto* thread = system.Kernel().GetCurrentEmuThread();
+        if (system.DebuggerEnabled()) {
+            system.GetDebugger().NotifyThreadStopped(thread);
+        }
+        LOG_CRITICAL(Debug_Emulated,
+                     "Suspending thread due to unrecoverable break (hbl={}, reason={:#X})",
+                     is_hbl, reason);
+        thread->RequestSuspend(Kernel::SuspendType::Debug);
+    }
+}
+
+void ReturnFromException(Core::System& system, Result result) {
+    UNIMPLEMENTED();
+}
+
+void Break64(Core::System& system, BreakReason break_reason, uint64_t arg, uint64_t size) {
+    Break(system, break_reason, arg, size);
+}
+
+void Break64From32(Core::System& system, BreakReason break_reason, uint32_t arg, uint32_t size) {
+    Break(system, break_reason, arg, size);
+}
+
+void ReturnFromException64(Core::System& system, Result result) {
+    ReturnFromException(system, result);
+}
+
+void ReturnFromException64From32(Core::System& system, Result result) {
+    ReturnFromException(system, result);
+}
+
+} // namespace Kernel::Svc

@@ -1,0 +1,67 @@
+// SPDX-FileCopyrightText: 2016 Citra Emulator Project
+// SPDX-FileCopyrightText: 2025 citron Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#pragma once
+
+#include <memory>
+#include <vector>
+
+#include <QList>
+#include <QWidget>
+
+#include "core/file_sys/vfs/vfs_types.h"
+
+namespace Core {
+class System;
+}
+
+class QCheckBox;
+class QStandardItem;
+class QStandardItemModel;
+class QTreeView;
+class QVBoxLayout;
+
+namespace ModManager {
+class GameBananaDialog;
+}
+
+namespace Ui {
+class ConfigurePerGameAddons;
+}
+
+class ConfigurePerGameAddons : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit ConfigurePerGameAddons(Core::System& system_, QWidget* parent = nullptr);
+    ~ConfigurePerGameAddons() override;
+
+    /// Save all button configurations to settings file
+    void ApplyConfiguration();
+
+    void LoadFromFile(FileSys::VirtualFile file_);
+
+    void SetTitleId(u64 id);
+    void UpdateTheme(const QString& custom_accent = QString{});
+
+private:
+    void OnContextMenu(const QPoint& pos);
+    void changeEvent(QEvent* event) override;
+    void RetranslateUI();
+
+    void LoadConfiguration();
+
+    std::unique_ptr<Ui::ConfigurePerGameAddons> ui;
+    FileSys::VirtualFile file;
+    u64 title_id = 0;
+
+    QVBoxLayout* layout = nullptr;
+    QTreeView* tree_view = nullptr;
+    QStandardItemModel* item_model = nullptr;
+    QCheckBox* checkbox_list_dlc_separately = nullptr;
+
+    std::vector<QList<QStandardItem*>> list_items;
+
+    Core::System& system;
+};

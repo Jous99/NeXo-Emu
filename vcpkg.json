@@ -1,0 +1,83 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "citron",
+  "builtin-baseline": "c3173be258001c60814b6adf161322b6eb3688ee",
+  "version": "1.0",
+  "dependencies": [
+    "boost-algorithm",
+    "boost-asio",
+    "boost-bind",
+    "boost-config",
+    "boost-container",
+    "boost-context",
+    "boost-crc",
+    "boost-functional",
+    "boost-heap",
+    "boost-icl",
+    "boost-intrusive",
+    "boost-mpl",
+    {
+      "name": "boost-process",
+      "platform": "!android"
+    },
+    "boost-range",
+    "boost-spirit",
+    "boost-test",
+    "boost-timer",
+    "boost-variant",
+    {
+      "name": "ffmpeg",
+      "platform": "!mingw & windows",
+      "default-features": false,
+      "features": ["avcodec", "avfilter", "swscale"]
+    },
+    "fmt",
+    "libarchive",
+    "lz4",
+    "nlohmann-json",
+    {
+      "name": "openssl",
+      "platform": "!linux & !osx"
+    },
+    {
+      "name": "opus",
+      "platform": "!linux & !osx & !android"
+    },
+    "zlib",
+    "zstd"
+  ],
+  "features": {
+    "citron-tests": {
+      "description": "Compile tests",
+      "dependencies": ["catch2"]
+    },
+    "web-service": {
+      "description": "Enable web services (telemetry, etc.)",
+      "dependencies": [
+        {
+          "name": "openssl",
+          "platform": "!linux & !osx"
+        }
+      ]
+    },
+    "android": {
+      "description": "Enable Android dependencies",
+      "dependencies": [
+        {
+          "name": "oboe",
+          "platform": "android"
+        }
+      ]
+    }
+  },
+  "overrides": [
+    {
+      "name": "catch2",
+      "version": "3.3.1"
+    },
+    {
+      "name": "fmt",
+      "version": "12.1.0"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+// SPDX-FileCopyrightText: Copyright 2026 citron Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#pragma once
+
+#include <QColor>
+#include <QMap>
+#include <QEvent>
+#include <QObject>
+#include <QPersistentModelIndex>
+#include <QSize>
+#include <QStyledItemDelegate>
+#include <QTimer>
+
+class QTreeView;
+class QPainter;
+class QRect;
+class QPixmap;
+class QString;
+class QModelIndex;
+class QAbstractItemView;
+class QHelpEvent;
+class QStyleOptionViewItem;
+
+/**
+ * GameListDelegate — renders the Game List entries as modern gaming cards.
+ * This modernizes the old Qt TreeView aesthetic to follow the Citron branded themeing.
+ */
+class GameListDelegate : public QStyledItemDelegate {
+    Q_OBJECT
+
+public:
+    explicit GameListDelegate(QTreeView* view, QObject* parent = nullptr);
+    ~GameListDelegate() override;
+
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+               const QModelIndex& index) const override;
+    bool helpEvent(QHelpEvent* event, QAbstractItemView* view, const QStyleOptionViewItem& option,
+                   const QModelIndex& index) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
+
+    // Constants for layout
+    static constexpr int kCardMarginV = 3;
+    static constexpr int kCardRadius = 8;
+    static constexpr int kLineSpacing = 4;
+
+    // Helpers for dynamic sizing
+    int GetCardHeight() const;
+    int GetIconSize() const;
+
+public slots:
+    void AdvanceAnimations();
+    void SetPopulating(bool populating);
+    void RegisterEntryAnimation(const QModelIndex& index);
+    void ClearAnimations();
+
+
+private:
+    // ---- Per-column paint helpers ----
+    void PaintBackground(QPainter* painter, const QStyleOptionViewItem& option,
+                         const QModelIndex& index) const;
+    void PaintGameInfo(QPainter* painter, const QRect& rect, const QStyleOptionViewItem& option,
+                       const QModelIndex& index) const;
+    void PaintPlayTime(QPainter* painter, const QRect& rect, const QStyleOptionViewItem& option,
+                       const QModelIndex& index) const;
+    void PaintCompatibility(QPainter* painter, const QRect& rect,
+                            const QStyleOptionViewItem& option, const QModelIndex& index) const;
+    void PaintDefault(QPainter* painter, const QRect& rect, const QStyleOptionViewItem& option,
+                      const QModelIndex& index) const;
+    // NeXo online-count pill above the existing LDN text; falls through to PaintDefault when
+    // signed out or the title isn't NeXo-tracked.
+    void PaintOnline(QPainter* painter, const QRect& rect, const QStyleOptionViewItem& option,
+                     const QModelIndex& index) const;
+
+    // ---- Color helpers ----
+    QColor CardBg() const;
+    QColor TextColor() const;
+    QColor DimColor() const;
+    QColor SelectionColor() const;
+    QColor HeaderTextColor() const;
+    QColor AccentColor() const;
+
+    // Animation and caching state
+    mutable QMap<QPersistentModelIndex, int> vertical_scroll_offsets;
+    mutable QMap<QPersistentModelIndex, int> vertical_scroll_pause;
+    mutable QMap<QPersistentModelIndex, qreal> hover_states;
+    mutable QMap<QPersistentModelIndex, qreal> entry_animations;
+    mutable QMap<QPersistentModelIndex, qreal> pulse_states;
+    mutable QMap<QPersistentModelIndex, bool> pulse_direction;
+    
+    bool is_populating = false;
+    bool enable_bubble_animations = false;
+    qreal population_fade_global = 1.0;
+    mutable qreal refresh_angle = 0.0;
+    // Performance optimizations
+    mutable QMap<QString, QIcon> greyscale_icon_cache;
+    mutable QMap<QString, QStringList> addons_item_cache;
+    mutable QSet<QPersistentModelIndex> animating_indices;
+    QTimer* animation_timer;
+    QTreeView* tree_view;
+};

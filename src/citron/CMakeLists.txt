@@ -1,0 +1,763 @@
+# SPDX-FileCopyrightText: 2018 yuzu Emulator Project
+# SPDX-FileCopyrightText: Copyright 2025 citron Emulator Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+# Prevent parallel LTO links from OOMing the runner
+set_property(GLOBAL PROPERTY JOB_POOLS link_pool=1)
+set(CMAKE_JOB_POOL_LINK link_pool)
+
+# citron target creation
+add_executable(citron
+    Info.plist
+    about_dialog.cpp
+    about_dialog.h
+    aboutdialog.ui
+    spinning_logo.cpp
+    spinning_logo.h
+    util/confetti.cpp
+    util/confetti.h
+    util/card_flip.cpp
+    util/card_flip.h
+    util/image_cache.h
+    util/plinko_widget.cpp
+    util/plinko_widget.h
+    util/blackjack_widget.cpp
+    util/blackjack_widget.h
+    util/cup_shuffle_widget.cpp
+    util/cup_shuffle_widget.h
+    util/dice_widget.cpp
+    util/dice_widget.h
+    applets/qt_amiibo_settings.cpp
+    applets/qt_amiibo_settings.h
+    applets/qt_amiibo_settings.ui
+    applets/qt_controller.cpp
+    applets/qt_controller.h
+    applets/qt_controller.ui
+    applets/qt_error.cpp
+    applets/qt_error.h
+    applets/qt_profile_select.cpp
+    applets/qt_profile_select.h
+    applets/qt_software_keyboard.cpp
+    applets/qt_software_keyboard.h
+    applets/qt_software_keyboard.ui
+    applets/qt_web_browser.cpp
+    applets/qt_web_browser.h
+    applets/qt_web_browser_scripts.h
+    bootmanager.cpp
+    bootmanager.h
+    controller_overlay.cpp
+    controller_overlay.h
+    compatdb.ui
+    compatdb.ui
+
+    compatibility_list.cpp
+    compatibility_list.h
+    configuration/configuration_shared.cpp
+    configuration/configuration_shared.h
+    configuration/configuration_styling.h
+    configuration/configure.ui
+    configuration/configure_applets.cpp
+    configuration/configure_applets.h
+    configuration/configure_applets.ui
+    configuration/configure_audio.cpp
+    configuration/configure_audio.h
+    configuration/configure_audio.ui
+    configuration/configure_camera.cpp
+    configuration/configure_camera.h
+    configuration/configure_camera.ui
+    configuration/configure_cpu.cpp
+    configuration/configure_cpu.h
+    configuration/configure_cpu.ui
+    configuration/configure_cpu_debug.cpp
+    configuration/configure_cpu_debug.h
+    configuration/configure_cpu_debug.ui
+    configuration/configure_debug.cpp
+    configuration/configure_debug.h
+    configuration/configure_debug.ui
+    configuration/configure_debug_controller.cpp
+    configuration/configure_debug_controller.h
+    configuration/configure_debug_controller.ui
+    configuration/configure_debug_tab.cpp
+    configuration/configure_debug_tab.h
+    configuration/configure_debug_tab.ui
+    configuration/configure_dialog.cpp
+    configuration/configure_dialog.h
+    configuration/configure_filesystem.cpp
+    configuration/configure_filesystem.h
+    configuration/configure_filesystem.ui
+    configuration/configure_general.cpp
+    configuration/configure_general.h
+    configuration/configure_general.ui
+    configuration/configure_graphics.cpp
+    configuration/configure_graphics.h
+    configuration/configure_graphics.ui
+    configuration/configure_graphics_advanced.cpp
+    configuration/configure_graphics_advanced.h
+    configuration/configure_graphics_advanced.ui
+    configuration/configure_hotkeys.cpp
+    configuration/configure_hotkeys.h
+    configuration/configure_hotkeys.ui
+    configuration/configure_input.cpp
+    configuration/configure_input.h
+    configuration/configure_input.ui
+    configuration/configure_input_advanced.cpp
+    configuration/configure_input_advanced.h
+    configuration/configure_input_advanced.ui
+    configuration/configure_input_per_game.cpp
+    configuration/configure_input_per_game.h
+    configuration/configure_input_per_game.ui
+    configuration/configure_input_player.cpp
+    configuration/configure_input_player.h
+    configuration/configure_input_player.ui
+    configuration/configure_input_player_widget.cpp
+    configuration/configure_input_player_widget.h
+    configuration/configure_input_profile_dialog.cpp
+    configuration/configure_input_profile_dialog.h
+    configuration/configure_input_profile_dialog.ui
+    configuration/configure_linux_tab.cpp
+    configuration/configure_linux_tab.h
+    configuration/configure_linux_tab.ui
+    configuration/configure_mouse_panning.cpp
+    configuration/configure_mouse_panning.h
+    configuration/configure_mouse_panning.ui
+    configuration/configure_motion_touch.cpp
+    configuration/configure_motion_touch.h
+    configuration/configure_motion_touch.ui
+    configuration/configure_neo_themes.cpp
+    configuration/configure_neo_themes.h
+    configuration/configure_per_game.cpp
+    configuration/configure_per_game.h
+    configuration/configure_per_game.ui
+    configuration/configure_per_game_addons.cpp
+    configuration/configure_per_game_addons.h
+    configuration/configure_per_game_addons.ui
+    configuration/configure_per_game_cheats.cpp
+    configuration/configure_per_game_cheats.h
+    configuration/configure_per_game_cheats.ui
+    configuration/configure_profile_manager.cpp
+    configuration/configure_profile_manager.h
+    configuration/configure_profile_manager.ui
+    configuration/configure_ringcon.cpp
+    configuration/configure_ringcon.h
+    configuration/configure_ringcon.ui
+    configuration/configure_network.cpp
+    configuration/configure_network.h
+    configuration/configure_network.ui
+    configuration/configure_system.cpp
+    configuration/configure_system.h
+    configuration/configure_system.ui
+    configuration/configure_tas.cpp
+    configuration/configure_tas.h
+    configuration/configure_tas.ui
+    configuration/configure_touch_from_button.cpp
+    configuration/configure_touch_from_button.h
+    configuration/configure_touch_from_button.ui
+    configuration/configure_touchscreen_advanced.cpp
+    configuration/configure_touchscreen_advanced.h
+    configuration/configure_touchscreen_advanced.ui
+    configuration/configure_touch_widget.h
+    configuration/configure_ui.cpp
+    configuration/configure_ui.h
+    configuration/configure_ui.ui
+    configuration/configure_vibration.cpp
+    configuration/configure_vibration.h
+    configuration/configure_vibration.ui
+    configuration/configure_web.cpp
+    configuration/configure_web.h
+    configuration/configure_web.ui
+    configuration/input_profiles.cpp
+    configuration/input_profiles.h
+    configuration/shared_translation.cpp
+    configuration/shared_translation.h
+    configuration/shared_widget.cpp
+    configuration/shared_widget.h
+    configuration/style_animation_event_filter.cpp
+    configuration/style_animation_event_filter.h
+    configuration/qt_config.cpp
+    configuration/qt_config.h
+    debugger/console.cpp
+    debugger/console.h
+    debugger/controller.cpp
+    debugger/controller.h
+    debugger/wait_tree.cpp
+    debugger/wait_tree.h
+    debugger/memory_viewer.cpp
+    debugger/memory_viewer.h
+    debugger/function_browser.cpp
+    debugger/function_browser.h
+    debugger/memory_tools.cpp
+    debugger/memory_tools.h
+    debugger/address_list.cpp
+    debugger/address_list.h
+    debugger/disassembler_view.cpp
+    debugger/disassembler_view.h
+    game_details_panel.cpp
+    game_details_panel.h
+    game_grid_delegate.cpp
+    game_grid_delegate.h
+    game_list.cpp
+    game_list.h
+    game_list_delegate.cpp
+    game_list_delegate.h
+    game_list_loading_overlay.cpp
+    game_list_loading_overlay.h
+    game_list_p.h
+    game_list_worker.cpp
+    game_list_worker.h
+    hotkeys.cpp
+    hotkeys.h
+    hotkey_profile_manager.cpp
+    hotkey_profile_manager.h
+    custom_metadata.cpp
+    custom_metadata.h
+    custom_metadata_dialog.cpp
+    custom_metadata_dialog.h
+    custom_metadata_dialog.ui
+    poster_selection_dialog.cpp
+    poster_selection_dialog.h
+    icon_selection_dialog.cpp
+    icon_selection_dialog.h
+    install_dialog.cpp
+    install_dialog.h
+    loading_screen.cpp
+    loading_screen.h
+    loading_screen.ui
+    main.cpp
+    main.h
+    main.ui
+    multiplayer/chat_room.cpp
+    multiplayer/chat_room.h
+    multiplayer/chat_room.ui
+    multiplayer/chat_room_member_delegate.cpp
+    multiplayer/chat_room_member_delegate.h
+    multiplayer/client_room.h
+    multiplayer/client_room.cpp
+    multiplayer/client_room.ui
+    multiplayer/direct_connect.cpp
+    multiplayer/direct_connect.h
+    multiplayer/direct_connect.ui
+    multiplayer/host_room.cpp
+    multiplayer/host_room.h
+    multiplayer/host_room.ui
+    multiplayer/lobby.cpp
+    multiplayer/lobby.h
+    multiplayer/lobby.ui
+    multiplayer/lobby_card_delegate.cpp
+    multiplayer/lobby_card_delegate.h
+    multiplayer/lobby_p.h
+    multiplayer/message.cpp
+    multiplayer/message.h
+    multiplayer/moderation_dialog.cpp
+    multiplayer/moderation_dialog.h
+    multiplayer/moderation_dialog.ui
+    multiplayer/state.cpp
+    multiplayer/state.h
+    multiplayer/validation.h
+    play_time_manager.cpp
+    play_time_manager.h
+    nexo_account_dialog.cpp
+    nexo_account_dialog.h
+    nexo_account_page_p.h
+    nexo_avatar_cache.cpp
+    nexo_avatar_cache.h
+    nexo_controller.cpp
+    nexo_controller.h
+    nexo_friend_delegate.cpp
+    nexo_friend_delegate.h
+    nexo_history_delegate.cpp
+    nexo_history_delegate.h
+    nexo_ldn_counts.cpp
+    nexo_ldn_counts.h
+    nexo_network_probe.cpp
+    nexo_network_probe.h
+    nexo_online_counts.cpp
+    nexo_online_counts.h
+    nexo_population_dialog.cpp
+    nexo_population_dialog.h
+    nexo_population_history.cpp
+    nexo_population_history.h
+    nexo_save_sync.cpp
+    nexo_save_sync.h
+    nexo_toast.cpp
+    nexo_toast.h
+    precompiled_headers.h
+    qt_common.cpp
+    qt_common.h
+    startup_checks.cpp
+    startup_checks.h
+    theme.h
+    uisettings.cpp
+    uisettings.h
+    util/clickable_label.cpp
+    util/clickable_label.h
+    util/controller_navigation.cpp
+    util/controller_navigation.h
+    util/limitable_input_dialog.cpp
+    util/limitable_input_dialog.h
+    util/overlay_dialog.cpp
+    util/overlay_dialog.h
+    util/overlay_dialog.ui
+    util/performance_overlay.cpp
+    util/performance_overlay.h
+    util/multiplayer_room_overlay.cpp
+    util/multiplayer_room_overlay.h
+    util/rainbow_style.cpp
+    util/rainbow_style.h
+    util/vram_overlay.cpp
+    util/vram_overlay.h
+    util/sequence_dialog/sequence_dialog.cpp
+    util/sequence_dialog/sequence_dialog.h
+    util/title_ids.h
+    util/url_request_interceptor.cpp
+    util/url_request_interceptor.h
+    util/util.cpp
+    util/util.h
+    util/steam_grid_db.cpp
+    util/steam_grid_db.h
+    vk_device_info.cpp
+    vk_device_info.h
+    compatdb.cpp
+    compatdb.h
+    ui/game_view_base.cpp
+    ui/game_view_base.h
+    ui/game_grid_view.cpp
+    ui/game_grid_view.h
+    ui/game_carousel_view.cpp
+    ui/game_carousel_view.h
+    ui/system_audio_loopback.cpp
+    ui/system_audio_loopback.h
+    ui/population_bar_chart.cpp
+    ui/population_bar_chart.h
+    ui/nexo_profile_chip.cpp
+    ui/nexo_profile_chip.h
+    ui/nexo_status_cluster.cpp
+    ui/nexo_status_cluster.h
+    ui/game_tree_view.cpp
+    ui/game_tree_view.h
+    ui/nav_settings_overlay.cpp
+    ui/nav_settings_overlay.h
+    citron.qrc
+)
+
+# citron.rc only #includes winresrc.h -- it needs none of the target's C++ include dirs, but
+# as a source of the main `citron` target it inherits all of them anyway (Boost alone
+# contributes 150+ separate -I flags since CPM exposes each submodule individually). CMake's
+# RC language doesn't honor a per-source INCLUDE_DIRECTORIES override, so the only way to
+# keep the RC compile command under Windows' CreateProcess argument limit ("The parameter is
+# incorrect. (is the command line too long?)") is to compile it in its own target that never
+# links against Boost/Qt/etc. in the first place.
+#
+# WIN32-only: RC is a Windows resource-compiler language that isn't enabled on other
+# platforms' CMake configuration here, so an OBJECT library whose only source is a .rc file
+# has no linker language CMake can determine on Linux/macOS ("CMake can not determine linker
+# language for target: citron_rc") -- previously citron.rc was just an inert extra source
+# on the main citron target there (mixed with its many .cpp sources, whose CXX language
+# CMake fell back on), which is the behavior this keeps for non-Windows builds.
+if (WIN32)
+    add_library(citron_rc OBJECT citron.rc)
+    set_target_properties(citron_rc PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+    target_link_libraries(citron PRIVATE citron_rc)
+endif()
+
+# Qt AUTOGEN/RCC sources are not unity-safe.
+set_property(TARGET citron PROPERTY UNITY_BUILD OFF)
+
+set_source_files_properties(controller_overlay.cpp PROPERTIES SKIP_AUTOUIC ON)
+
+if (CITRON_CRASH_DUMPS)
+    target_sources(citron PRIVATE
+        breakpad.cpp
+        breakpad.h
+    )
+
+    target_link_libraries(citron PRIVATE
+        libbreakpad_client
+        unordered_dense::unordered_dense
+    )
+    target_compile_definitions(citron PRIVATE CITRON_CRASH_DUMPS)
+endif()
+
+if (CITRON_USE_AUTO_UPDATER)
+    target_sources(citron PRIVATE
+        updater/updater_service.cpp
+        updater/updater_service.h
+        updater/updater_dialog.cpp
+        updater/updater_dialog.h
+        updater/updater_dialog.ui
+    )
+
+    target_compile_definitions(citron PRIVATE
+        # Ensure _WIN32 is defined for moc processing on Windows
+        $<$<BOOL:${WIN32}>:_WIN32>
+        CITRON_USE_AUTO_UPDATER
+    )
+
+    target_link_libraries(citron PRIVATE Qt6::Network)
+endif()
+
+# Mod Manager functionality for downloading patches
+target_sources(citron PRIVATE
+    mod_manager/gamebanana_service.cpp
+    mod_manager/gamebanana_service.h
+    mod_manager/gamebanana_dialog.cpp
+    mod_manager/gamebanana_dialog.h
+    mod_manager/gamebanana_dialog.ui
+    mod_manager/zip_extractor.cpp
+    mod_manager/zip_extractor.h
+)
+
+target_link_libraries(citron PRIVATE Qt6::Network)
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_definitions(citron PRIVATE
+        $<$<VERSION_LESS:$<CXX_COMPILER_VERSION>,15>:CANNOT_EXPLICITLY_INSTANTIATE>
+    )
+endif()
+
+file(GLOB COMPAT_LIST
+     ${PROJECT_BINARY_DIR}/dist/compatibility_list/compatibility_list.qrc
+     ${PROJECT_BINARY_DIR}/dist/compatibility_list/compatibility_list.json)
+file(GLOB_RECURSE ICONS ${PROJECT_SOURCE_DIR}/dist/icons/*)
+file(GLOB_RECURSE THEMES ${PROJECT_SOURCE_DIR}/dist/qt_themes/*)
+
+if (ENABLE_QT_TRANSLATION)
+    set(CITRON_QT_LANGUAGES "${PROJECT_SOURCE_DIR}/dist/languages" CACHE PATH "Path to the translation bundle for the Qt frontend")
+    option(GENERATE_QT_TRANSLATION "Generate en.ts as the translation source file" OFF)
+    option(WORKAROUND_BROKEN_LUPDATE "Run lupdate directly through CMake if Qt's convenience wrappers don't work" OFF)
+
+    # Update source TS file if enabled
+    if (GENERATE_QT_TRANSLATION)
+        get_target_property(SRCS citron SOURCES)
+        # these calls to qt_create_translation also creates a rule to generate en.qm which conflicts with providing english plurals
+        # so we have to set a OUTPUT_LOCATION so that we don't have multiple rules to generate en.qm
+        set_source_files_properties(${CITRON_QT_LANGUAGES}/en.ts PROPERTIES OUTPUT_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/translations")
+        if (WORKAROUND_BROKEN_LUPDATE)
+            add_custom_command(OUTPUT ${CITRON_QT_LANGUAGES}/en.ts
+                COMMAND lupdate
+                    -source-language en_US
+                    -target-language en_US
+                    ${SRCS}
+                    ${UIS}
+                    -ts ${CITRON_QT_LANGUAGES}/en.ts
+                DEPENDS
+                    ${SRCS}
+                    ${UIS}
+                WORKING_DIRECTORY
+                    ${CMAKE_CURRENT_SOURCE_DIR}
+            )
+        else()
+            qt_create_translation(QM_FILES
+                ${SRCS}
+                ${UIS}
+                ${CITRON_QT_LANGUAGES}/en.ts
+            OPTIONS
+                -source-language en_US
+                -target-language en_US
+            )
+        endif()
+
+        # Generate plurals into dist/english_plurals/generated_en.ts so it can be used to revise dist/english_plurals/en.ts
+        set(GENERATED_PLURALS_FILE ${PROJECT_SOURCE_DIR}/dist/english_plurals/generated_en.ts)
+        set_source_files_properties(${GENERATED_PLURALS_FILE} PROPERTIES OUTPUT_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/plurals")
+        if (WORKAROUND_BROKEN_LUPDATE)
+            add_custom_command(OUTPUT ${GENERATED_PLURALS_FILE}
+                COMMAND lupdate
+                    -source-language en_US
+                    -target-language en_US
+                    ${SRCS}
+                    ${UIS}
+                    -ts ${GENERATED_PLURALS_FILE}
+                DEPENDS
+                    ${SRCS}
+                    ${UIS}
+                WORKING_DIRECTORY
+                    ${CMAKE_CURRENT_SOURCE_DIR}
+            )
+        else()
+            qt_create_translation(QM_FILES ${SRCS} ${UIS} ${GENERATED_PLURALS_FILE} OPTIONS -pluralonly -source-language en_US -target-language en_US)
+        endif()
+
+        add_custom_target(translation ALL DEPENDS ${CITRON_QT_LANGUAGES}/en.ts ${GENERATED_PLURALS_FILE})
+    endif()
+
+    # Find all TS files except en.ts
+    file(GLOB_RECURSE LANGUAGES_TS ${CITRON_QT_LANGUAGES}/*.ts)
+    list(REMOVE_ITEM LANGUAGES_TS ${CITRON_QT_LANGUAGES}/en.ts)
+
+    # Compile TS files to QM files
+    qt_add_translation(LANGUAGES_QM ${LANGUAGES_TS})
+
+    # Compile english plurals TS file to en.qm
+    qt_add_translation(LANGUAGES_QM ${PROJECT_SOURCE_DIR}/dist/english_plurals/en.ts)
+
+    # Build a QRC file from the QM file list
+    set(LANGUAGES_QRC ${CMAKE_CURRENT_BINARY_DIR}/languages.qrc)
+    file(WRITE ${LANGUAGES_QRC} "<RCC><qresource prefix=\"languages\">\n")
+    foreach (QM ${LANGUAGES_QM})
+        get_filename_component(QM_FILE ${QM} NAME)
+        file(APPEND ${LANGUAGES_QRC} "<file>${QM_FILE}</file>\n")
+    endforeach (QM)
+    file(APPEND ${LANGUAGES_QRC} "</qresource></RCC>")
+
+    # Add the QRC file to package in all QM files
+    qt_add_resources(LANGUAGES ${LANGUAGES_QRC})
+else()
+    set(LANGUAGES)
+endif()
+
+target_sources(citron
+    PRIVATE
+        ${COMPAT_LIST}
+        ${ICONS}
+        ${LANGUAGES}
+        ${THEMES}
+)
+
+if (APPLE)
+    set(MACOSX_ICON "../../dist/citron.icns")
+    set_source_files_properties(${MACOSX_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(citron PRIVATE ${MACOSX_ICON})
+    set_target_properties(citron PROPERTIES MACOSX_BUNDLE TRUE)
+    set_target_properties(citron PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist)
+
+    if (NOT USE_SYSTEM_MOLTENVK)
+        set(MOLTENVK_PLATFORM "macOS")
+        set(MOLTENVK_VERSION "v1.4.0")
+        download_moltenvk_external(${MOLTENVK_PLATFORM} ${MOLTENVK_VERSION})
+    endif()
+    find_library(MOLTENVK_LIBRARY MoltenVK REQUIRED)
+    message(STATUS "Using MoltenVK at ${MOLTENVK_LIBRARY}.")
+    set_source_files_properties(${MOLTENVK_LIBRARY} PROPERTIES MACOSX_PACKAGE_LOCATION Frameworks
+                                    XCODE_FILE_ATTRIBUTES "CodeSignOnCopy")
+    target_sources(citron PRIVATE ${MOLTENVK_LIBRARY})
+
+elseif(WIN32)
+    # compile as a win32 gui application instead of a console application
+    target_link_libraries(citron PRIVATE Qt6::EntryPointPrivate)
+
+    # Add Windows-specific libraries for WMI/COM to read hardware sensors
+    target_link_libraries(citron PRIVATE ole32 oleaut32 wbemuuid)
+
+    if(MSVC)
+        target_link_libraries(citron PRIVATE version.lib)
+        set_target_properties(citron PROPERTIES LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS")
+    elseif(MINGW)
+        set_target_properties(citron PROPERTIES LINK_FLAGS_RELEASE "-Wl,--subsystem,windows")
+    endif()
+endif()
+
+# Robust static linking and linker selection under GCC LTO
+# -fuse-ld=bfd is a GCC-only flag — Clang (llvm-mingw / MSYS2 clang64) uses
+# lld by default and does not accept -fuse-ld=bfd.  The generator expression
+# restricts the flag to GNU builds so MinGW/Clang cross-compile builds are unaffected.
+if (NOT MSVC AND NOT APPLE)
+    if (NOT WIN32)
+        # Keep our static OpenSSL from shadowing Qt's system libssl/libcrypto (ELF-only).
+        target_link_options(citron PRIVATE "SHELL:-Xlinker --exclude-libs -Xlinker libcrypto.a,libssl.a")
+    endif()
+    target_link_options(citron PRIVATE "$<$<CXX_COMPILER_ID:GNU>:-fuse-ld=bfd>")
+    if (MINGW AND CITRON_ENABLE_LTO)
+        target_link_options(citron PRIVATE "-Wl,--allow-multiple-definition")
+    endif()
+
+    # Force-include critical static archives and resolve cycles
+    if (ENABLE_WEB_SERVICE)
+        target_compile_definitions(citron PRIVATE -DENABLE_WEB_SERVICE)
+        if (CITRON_ENABLE_TRACY AND TARGET TracyClient)
+            target_link_libraries(citron PRIVATE
+                "-Wl,--start-group"
+                "-Wl,--whole-archive" common core input_common frontend_common network video_core web_service TracyClient "-Wl,--no-whole-archive"
+                "-Wl,--end-group"
+            )
+        else()
+            target_link_libraries(citron PRIVATE
+                "-Wl,--start-group"
+                "-Wl,--whole-archive" common core input_common frontend_common network video_core web_service "-Wl,--no-whole-archive"
+                "-Wl,--end-group"
+            )
+        endif()
+    else()
+        if (CITRON_ENABLE_TRACY AND TARGET TracyClient)
+            target_link_libraries(citron PRIVATE
+                "-Wl,--start-group"
+                "-Wl,--whole-archive" common core input_common frontend_common network video_core TracyClient "-Wl,--no-whole-archive"
+                "-Wl,--end-group"
+            )
+        else()
+            target_link_libraries(citron PRIVATE
+                "-Wl,--start-group"
+                "-Wl,--whole-archive" common core input_common frontend_common network video_core "-Wl,--no-whole-archive"
+                "-Wl,--end-group"
+            )
+        endif()
+    endif()
+else()
+    # MSVC-style linkers (real MSVC and clang-cl, both report MSVC=TRUE) and
+    # Apple's ld64 don't understand -Wl,--whole-archive. Without an explicit
+    # equivalent, TracyClient's static initializer (which spawns the profiler
+    # worker thread) gets stripped because nothing in citron.exe directly
+    # references a TracyClient symbol.
+    if (MSVC AND CITRON_ENABLE_TRACY AND TARGET TracyClient)
+        target_link_options(citron PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:TracyClient>")
+        target_link_libraries(citron PRIVATE common core input_common frontend_common network video_core TracyClient)
+    elseif (APPLE AND CITRON_ENABLE_TRACY AND TARGET TracyClient)
+        target_link_options(citron PRIVATE "-Wl,-force_load,$<TARGET_FILE:TracyClient>")
+        target_link_libraries(citron PRIVATE common core input_common frontend_common network video_core TracyClient)
+    else()
+        target_link_libraries(citron PRIVATE common core input_common frontend_common network video_core)
+    endif()
+endif()
+
+target_link_libraries(citron PRIVATE Boost::headers glad nlohmann_json::nlohmann_json Qt6::Widgets Qt6::Network Qt6::Svg)
+target_link_libraries(citron PRIVATE ${PLATFORM_LIBRARIES} Threads::Threads)
+
+# Add libarchive for updater functionality
+if (TARGET LibArchive::LibArchive)
+    target_link_libraries(citron PRIVATE LibArchive::LibArchive)
+    target_compile_definitions(citron PRIVATE CITRON_ENABLE_LIBARCHIVE)
+endif()
+
+# PulseAudio, for the "Reactive" carousel backdrop's system-audio loopback capture (Linux only).
+if (LIBPULSE_FOUND)
+    target_include_directories(citron PRIVATE ${LIBPULSE_INCLUDE_DIRS})
+    target_link_libraries(citron PRIVATE ${LIBPULSE_LIBRARIES})
+    target_compile_definitions(citron PRIVATE CITRON_ENABLE_PULSE_LOOPBACK)
+endif()
+
+target_link_libraries(citron PRIVATE Vulkan::Headers)
+if (UNIX AND NOT APPLE AND NOT ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+    target_link_libraries(citron PRIVATE Qt6::GuiPrivate)
+endif()
+if (UNIX AND NOT APPLE)
+    target_link_libraries(citron PRIVATE Qt6::DBus)
+endif()
+
+target_compile_definitions(citron PRIVATE
+    # Use QStringBuilder for string concatenation to reduce
+    # the overall number of temporary strings created.
+    -DQT_USE_QSTRINGBUILDER
+
+    # Disable implicit conversions from/to C strings
+    -DQT_NO_CAST_FROM_ASCII
+    -DQT_NO_CAST_TO_ASCII
+
+    # Disable implicit type narrowing in signal/slot connect() calls.
+    -DQT_NO_NARROWING_CONVERSIONS_IN_CONNECT
+
+    # Disable unsafe overloads of QProcess' start() function.
+    -DQT_NO_PROCESS_COMBINED_ARGUMENT_START
+
+    # Disable implicit QString->QUrl conversions to enforce use of proper resolving functions.
+    -DQT_NO_URL_CAST_FROM_STRING
+)
+
+if (CITRON_ENABLE_COMPATIBILITY_REPORTING)
+    target_compile_definitions(citron PRIVATE -DCITRON_ENABLE_COMPATIBILITY_REPORTING)
+endif()
+
+if (ENABLE_WEB_SERVICE)
+    target_compile_definitions(citron PRIVATE -DENABLE_WEB_SERVICE)
+endif()
+
+if (CITRON_USE_QT_MULTIMEDIA)
+    target_link_libraries(citron PRIVATE Qt6::Multimedia)
+    target_compile_definitions(citron PRIVATE -DCITRON_USE_QT_MULTIMEDIA)
+endif ()
+
+if (CITRON_USE_QT_WEB_ENGINE)
+    target_link_libraries(citron PRIVATE Qt6::WebEngineCore Qt6::WebEngineWidgets)
+    target_compile_definitions(citron PRIVATE -DCITRON_USE_QT_WEB_ENGINE)
+endif ()
+
+if (CITRON_ENABLE_PGO_GENERATE AND MSVC)
+    target_compile_definitions(citron PRIVATE -DCITRON_ENABLE_PGO_GENERATE)
+    target_link_libraries(citron PRIVATE pgobootrun)
+endif()
+
+if (CITRON_ENABLE_PGO_USE)
+    target_compile_definitions(citron PRIVATE -DCITRON_ENABLE_PGO_USE)
+endif()
+
+if(UNIX AND NOT APPLE)
+    install(TARGETS citron)
+endif()
+
+if (WIN32 AND QT_VERSION VERSION_GREATER_EQUAL 6)
+    set(CITRON_EXE_DIR "$<TARGET_FILE_DIR:citron>")
+
+    if (MSVC)
+        # Locate windeployqt from the Qt6 tools directory (bundled Qt).
+        # Under MSVC with CITRON_USE_BUNDLED_QT=ON, Qt6 is in build/externals/qt/.
+        find_program(WINDEPLOYQT_EXECUTABLE
+            NAMES windeployqt6 windeployqt
+            HINTS "${Qt6_DIR}/../../../bin"
+            NO_DEFAULT_PATH
+        )
+        if (WINDEPLOYQT_EXECUTABLE)
+            add_custom_command(TARGET citron POST_BUILD
+                COMMAND ${WINDEPLOYQT_EXECUTABLE}
+                    "${CITRON_EXE_DIR}/citron.exe"
+                    --dir "${CITRON_EXE_DIR}"
+                    --libdir "${CITRON_EXE_DIR}"
+                    --plugindir "${CITRON_EXE_DIR}/plugins"
+                    --no-compiler-runtime
+                    --no-opengl-sw
+                    --no-system-d3d-compiler
+                    --no-translations
+                    --verbose 0
+                COMMENT "Running windeployqt for MSVC build"
+            )
+        else()
+            message(WARNING "windeployqt6 not found. Qt plugins will not be deployed automatically.")
+        endif()
+    else()
+        # MinGW: windeployqt is unreliable in CI environments and conflicts with
+        # CopyMinGWDeps.cmake which handles both DLLs and plugins (platforms, TLS,
+        # imageformats, styles) directly from /ucrt64/share/qt6/plugins/.
+        # Do not run windeployqt here to avoid double-deployment and potential
+        # DLL version conflicts between Qt's bundled GCC runtime and MSYS2's.
+        message(STATUS "MinGW build: Qt plugins deployed by CopyMinGWDeps.cmake")
+    endif()
+endif()
+
+if (WIN32 AND CITRON_USE_BUNDLED_QT)
+    include(CopyCitronQt6Deps)
+    copy_citron_Qt6_deps(citron)
+endif()
+
+if (ENABLE_SDL2)
+    target_link_libraries(citron PRIVATE SDL2::SDL2)
+    target_compile_definitions(citron PRIVATE HAVE_SDL2)
+endif()
+
+if (MSVC)
+    if (CITRON_USE_BUNDLED_SDL2)
+        include(CopyCitronSDLDeps)
+        copy_citron_SDL_deps(citron)
+    endif()
+    include(CopyCitronFFmpegDeps)
+    copy_citron_FFmpeg_deps(citron)
+elseif(MINGW)
+    include(CopyMinGWDeps)
+    copy_mingw_deps(citron SEARCH_PATHS "${FFmpeg_PATH}/bin" "${QT_TARGET_PATH}/bin")
+endif()
+
+if (ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64)
+    target_link_libraries(citron PRIVATE dynarmic::dynarmic)
+endif()
+
+if (CITRON_USE_PRECOMPILED_HEADERS)
+    # Disable PCH for MSVC 14.44+ due to __builtin_assume_aligned conflict
+    if (NOT (MSVC AND MSVC_VERSION GREATER_EQUAL 1944))
+        target_precompile_headers(citron PRIVATE precompiled_headers.h)
+    else()
+        message(STATUS "Precompiled headers disabled for citron due to MSVC 14.44+ compatibility issue")
+    endif()
+endif()
+
+create_target_directory_groups(citron)

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ConfigurePerGameAddons</class>
+ <widget class="QWidget" name="ConfigurePerGameAddons">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <property name="accessibleDescription">
+   <string>Add-Ons</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="0" column="0">
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents"/>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QPushButton" name="button_download_mods">
+     <property name="toolTip">
+      <string>Citron uses the v11 API of Gamebanana for mod installation. Some mods may not be compatible or available for download. Use the &quot;Website Link For Mod&quot; option if you run into any issues.</string>
+     </property>
+     <property name="text">
+      <string>Download Mods VIA Gamebanana</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

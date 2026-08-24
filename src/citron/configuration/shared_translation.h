@@ -1,0 +1,72 @@
+// SPDX-FileCopyrightText: Copyright 2023 yuzu Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 citron Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#pragma once
+
+#include <map>
+#include <memory>
+#include <typeindex>
+#include <utility>
+#include <vector>
+#include <QString>
+#include "common/common_types.h"
+#include "common/settings.h"
+
+class QWidget;
+
+namespace ConfigurationShared {
+using TranslationMap = std::map<u32, std::pair<QString, QString>>;
+using ComboboxTranslations = std::vector<std::pair<u32, QString>>;
+using ComboboxTranslationMap = std::map<u32, ComboboxTranslations>;
+
+std::unique_ptr<TranslationMap> InitializeTranslations(QWidget* parent);
+
+std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QWidget* parent);
+
+static const std::map<Settings::AntiAliasing, QString> anti_aliasing_texts_map = {
+    {Settings::AntiAliasing::None, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "None"))},
+    {Settings::AntiAliasing::Fxaa, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "FXAA"))},
+    {Settings::AntiAliasing::Smaa, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "SMAA"))},
+    {Settings::AntiAliasing::Taa, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "TAA"))},
+};
+
+static const std::map<Settings::ScalingFilter, QString> scaling_filter_texts_map = {
+    {Settings::ScalingFilter::NearestNeighbor,
+     QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Nearest"))},
+    {Settings::ScalingFilter::Bilinear,
+     QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Bilinear"))},
+    {Settings::ScalingFilter::Bicubic, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Bicubic"))},
+    {Settings::ScalingFilter::Gaussian,
+     QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Gaussian"))},
+    {Settings::ScalingFilter::Lanczos, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Lanczos"))},
+    {Settings::ScalingFilter::ScaleForce,
+     QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "ScaleForce"))},
+    {Settings::ScalingFilter::ScaleFx, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "ScaleFX"))},
+    {Settings::ScalingFilter::Fsr, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "FSR"))},
+    {Settings::ScalingFilter::Fsr2, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "FSR 2.0"))},
+    {Settings::ScalingFilter::CRTEasyMode,
+     QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "CRT EasyMode"))},
+    {Settings::ScalingFilter::CRTRoyale,
+     QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "CRT Royale"))},
+    {Settings::ScalingFilter::Cas, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "CAS"))},
+};
+
+static const std::map<Settings::ConsoleMode, QString> use_docked_mode_texts_map = {
+    {Settings::ConsoleMode::Docked, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Docked"))},
+    {Settings::ConsoleMode::Handheld, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Handheld"))},
+};
+
+static const std::map<Settings::GpuAccuracy, QString> gpu_accuracy_texts_map = {
+    {Settings::GpuAccuracy::Low, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Low (Performance)"))},
+    {Settings::GpuAccuracy::Normal, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Normal"))},
+    {Settings::GpuAccuracy::High, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "High"))},
+    {Settings::GpuAccuracy::Extreme, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Extreme"))},
+};
+
+static const std::map<Settings::RendererBackend, QString> renderer_backend_texts_map = {
+    {Settings::RendererBackend::Vulkan, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Vulkan"))},
+    {Settings::RendererBackend::Null, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Null"))},
+};
+
+} // namespace ConfigurationShared

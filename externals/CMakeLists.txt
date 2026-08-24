@@ -1,0 +1,387 @@
+# SPDX-FileCopyrightText: 2016 Citra Emulator Project
+# SPDX-FileCopyrightText: 2026 citron Emulator Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+# [UNITY-FIX] disable unity build for all externals.
+# Third-party sources hit macro/symbol collisions under CMake unity.
+set(CMAKE_UNITY_BUILD OFF)
+
+
+# Needed for ankerls map implementation used in various places
+if (NOT TARGET unordered_dense::unordered_dense)
+    add_subdirectory(unordered_dense)
+endif()
+
+# Dynarmic has cmake_minimum_required(3.12) and we may want to override
+# some of its variables, which is only possible in 3.13+
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
+# Disable tests in all externals supporting the standard option name
+set(BUILD_TESTING OFF)
+
+# Build only static externals
+set(BUILD_SHARED_LIBS OFF)
+
+# Skip install rules for all externals
+set_directory_properties(PROPERTIES EXCLUDE_FROM_ALL ON)
+
+# Xbyak (also used by Dynarmic, so needs to be added first)
+if ((ARCHITECTURE_x86 OR ARCHITECTURE_x86_64) AND NOT TARGET xbyak::xbyak)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/xbyak/CMakeLists.txt")
+        add_subdirectory(xbyak)
+    endif()
+endif()
+
+# Oaknut (also used by Dynarmic, so needs to be added first)
+if (ARCHITECTURE_arm64 AND NOT TARGET merry::oaknut)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/oaknut/CMakeLists.txt")
+        add_subdirectory(oaknut)
+    endif()
+endif()
+
+# Dynarmic
+if ((ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64) AND NOT TARGET dynarmic::dynarmic)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dynarmic/CMakeLists.txt")
+        set(DYNARMIC_IGNORE_ASSERTS ON)
+        add_subdirectory(dynarmic)
+        add_library(dynarmic::dynarmic ALIAS dynarmic)
+    endif()
+endif()
+
+# getopt
+if (MSVC)
+    add_subdirectory(getopt)
+endif()
+
+# Glad
+add_subdirectory(glad)
+
+# mbedtls removed: replaced by OpenSSL. Submodule kept on disk for
+# history but no longer built. CMake no longer adds it.
+
+# SPIRV-Headers
+if (NOT TARGET SPIRV-Headers)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/SPIRV-Headers/CMakeLists.txt")
+        add_subdirectory(SPIRV-Headers)
+    endif()
+endif()
+
+# Sirit
+# Tell sirit to use our target
+if (NOT TARGET sirit)
+    set(SIRIT_USE_SYSTEM_SPIRV_HEADERS ON)
+    set(SPIRV-Headers_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sirit/CMakeLists.txt")
+        add_subdirectory(sirit)
+    endif()
+endif()
+
+# libusb
+if (ENABLE_LIBUSB AND NOT TARGET libusb::usb)
+    add_subdirectory(libusb)
+endif()
+
+# SDL3 (submodule — externals/SDL points to SDL 3.x)
+# The SDL_compat/ shim re-exports SDL3 under the legacy SDL.h include path so
+# sources using `#include <SDL.h>` continue to compile against SDL3 headers.
+if (CITRON_USE_EXTERNAL_SDL2 AND NOT TARGET SDL2::SDL2 AND NOT TARGET SDL3::SDL3)
+    if (NOT WIN32)
+        # Citron itself needs: Atomic Audio Events Joystick Haptic Sensor Threads Timers
+        # SDL3 handles subsystem dependencies automatically; disable unused ones to
+        # keep build times down.
+        set(SDL_UNUSED_SUBSYSTEMS
+            File Filesystem
+            Locale Power Render)
+        foreach(_SUB ${SDL_UNUSED_SUBSYSTEMS})
+          string(TOUPPER ${_SUB} _OPT)
+          set(SDL_${_OPT} OFF)
+        endforeach()
+
+        set(HIDAPI ON)
+    endif()
+    if (APPLE)
+        set(SDL_FILE ON)
+    endif()
+
+    # libusb backend is required for the Switch 2 Joy-Con / Pro driver (SDL_hidapi_switch2.c
+    # is gated behind HAVE_LIBUSB). Force it on so those controllers are recognized.
+    set(SDL_HIDAPI ON CACHE BOOL "" FORCE)
+    set(SDL_HIDAPI_LIBUSB ON CACHE BOOL "" FORCE)
+
+    # SDL probes getresuid/getresgid without _GNU_SOURCE, so the check fails on glibc while the
+    # real compile still sees unistd.h declare them -- SDL_gtk.c then defines its own static
+    # fallbacks and the build fails. Redo the probe correctly and seed the result, so
+    # check_symbol_exists skips SDL's. Detected rather than assumed: musl has neither symbol and
+    # still needs SDL's fallback.
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        include(CheckSymbolExists)
+        set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+        check_symbol_exists(getresuid "unistd.h" CITRON_HAS_GETRESUID)
+        check_symbol_exists(getresgid "unistd.h" CITRON_HAS_GETRESGID)
+        unset(CMAKE_REQUIRED_DEFINITIONS)
+        if (CITRON_HAS_GETRESUID)
+            set(HAVE_GETRESUID 1 CACHE INTERNAL "getresuid is declared with _GNU_SOURCE")
+        endif()
+        if (CITRON_HAS_GETRESGID)
+            set(HAVE_GETRESGID 1 CACHE INTERNAL "getresgid is declared with _GNU_SOURCE")
+        endif()
+    endif()
+
+    add_subdirectory(SDL)
+    if (TARGET SDL3-shared)
+        target_include_directories(SDL3-shared INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/SDL_compat")
+        add_library(SDL2::SDL2 ALIAS SDL3-shared)
+    elseif (TARGET SDL3-static)
+        target_include_directories(SDL3-static INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/SDL_compat")
+        add_library(SDL2::SDL2 ALIAS SDL3-static)
+    elseif (TARGET SDL3)
+        target_include_directories(SDL3 INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/SDL_compat")
+        add_library(SDL2::SDL2 ALIAS SDL3)
+    endif()
+elseif (CITRON_USE_EXTERNAL_SDL2 AND TARGET SDL3::SDL3 AND NOT TARGET SDL2::SDL2)
+    # System SDL3 is present (e.g. installed via sdl3 Arch package) — create the compat alias.
+    add_library(SDL2::SDL2 ALIAS SDL3::SDL3)
+endif()
+
+# ENet
+if (NOT TARGET enet::enet)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/enet/CMakeLists.txt")
+        add_subdirectory(enet)
+        target_include_directories(enet INTERFACE ./enet/include)
+        add_library(enet::enet ALIAS enet)
+    endif()
+endif()
+
+# Cubeb
+if (ENABLE_CUBEB AND NOT TARGET cubeb::cubeb)
+    set(BUILD_TESTS OFF)
+    set(BUILD_TOOLS OFF)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cubeb/CMakeLists.txt")
+        add_subdirectory(cubeb)
+        add_library(cubeb::cubeb ALIAS cubeb)
+        if (NOT MSVC)
+            if (TARGET speex)
+                target_compile_options(speex PRIVATE -Wno-sign-compare)
+            endif()
+            target_compile_options(cubeb PRIVATE -Wno-implicit-const-int-float-conversion)
+        endif()
+    endif()
+endif()
+
+# httplib
+if (ENABLE_WEB_SERVICE AND NOT TARGET httplib::httplib)
+    set(HTTPLIB_REQUIRE_OPENSSL ON)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cpp-httplib/CMakeLists.txt")
+        add_subdirectory(cpp-httplib)
+    endif()
+endif()
+
+# cpp-jwt removed: JWT verification rewritten to use OpenSSL EVP_DigestVerify*
+# directly in verify_user_jwt.cpp. Submodule kept on disk for history but no
+# longer built.
+
+# Opus
+if (NOT TARGET Opus::opus)
+    set(OPUS_BUILD_TESTING OFF)
+    set(OPUS_BUILD_PROGRAMS OFF)
+    set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF)
+    set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/opus/CMakeLists.txt")
+        add_subdirectory(opus)
+    endif()
+endif()
+
+# FFMpeg
+if (CITRON_USE_BUNDLED_FFMPEG)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg/CMakeLists.txt")
+        add_subdirectory(ffmpeg)
+        set(FFmpeg_PATH "${FFmpeg_PATH}" PARENT_SCOPE)
+        set(FFmpeg_LDFLAGS "${FFmpeg_LDFLAGS}" PARENT_SCOPE)
+        set(FFmpeg_LIBRARIES "${FFmpeg_LIBRARIES}" PARENT_SCOPE)
+        set(FFmpeg_INCLUDE_DIR "${FFmpeg_INCLUDE_DIR}" PARENT_SCOPE)
+    endif()
+endif()
+
+# Vulkan-Headers
+if (CITRON_USE_EXTERNAL_VULKAN_HEADERS AND NOT TARGET Vulkan-Headers)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Vulkan-Headers/CMakeLists.txt")
+        add_subdirectory(Vulkan-Headers)
+    endif()
+endif()
+
+# Vulkan-Utility-Libraries
+if (CITRON_USE_EXTERNAL_VULKAN_UTILITY_LIBRARIES AND NOT TARGET Vulkan::LayerSettings)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Vulkan-Utility-Libraries/CMakeLists.txt")
+        add_subdirectory(Vulkan-Utility-Libraries)
+    endif()
+endif()
+
+# TZDB (Time Zone Database)
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/nx_tzdb/CMakeLists.txt")
+    add_subdirectory(nx_tzdb)
+endif()
+
+# VMA
+if (NOT TARGET GPUOpen::VulkanMemoryAllocator)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VulkanMemoryAllocator/CMakeLists.txt")
+        add_subdirectory(VulkanMemoryAllocator)
+    endif()
+endif()
+
+if (NOT TARGET LLVM::Demangle)
+    add_library(demangle demangle/ItaniumDemangle.cpp)
+    target_include_directories(demangle PUBLIC ./demangle)
+    if (NOT MSVC)
+        target_compile_options(demangle PRIVATE -Wno-deprecated-declarations) # std::is_pod
+    endif()
+    add_library(LLVM::Demangle ALIAS demangle)
+endif()
+
+add_library(stb stb/stb_dxt.cpp)
+target_include_directories(stb PUBLIC ./stb)
+
+if (NOT TARGET stb::headers)
+    add_library(stb::headers ALIAS stb)
+endif()
+
+add_library(tz tz/tz/tz.cpp)
+target_include_directories(tz PUBLIC ./tz)
+
+add_library(bc_decoder bc_decoder/bc_decoder.cpp)
+target_include_directories(bc_decoder PUBLIC ./bc_decoder)
+
+if (NOT TARGET RenderDoc::API)
+    add_library(renderdoc INTERFACE)
+    target_include_directories(renderdoc SYSTEM INTERFACE ./renderdoc)
+    add_library(RenderDoc::API ALIAS renderdoc)
+endif()
+
+if (ANDROID)
+   if (ARCHITECTURE_arm64)
+       add_subdirectory(libadrenotools)
+   endif()
+endif()
+
+if (UNIX AND NOT APPLE AND NOT TARGET gamemode::headers)
+    add_library(gamemode INTERFACE)
+    target_include_directories(gamemode INTERFACE gamemode)
+    add_library(gamemode::headers ALIAS gamemode)
+endif()
+
+# Breakpad
+# https://github.com/microsoft/vcpkg/blob/master/ports/breakpad/CMakeLists.txt
+if (CITRON_CRASH_DUMPS AND NOT TARGET libbreakpad_client)
+    # Resolve breakpad source directory: CPM populates breakpad_SOURCE_DIR,
+    # submodule path is the local breakpad/ directory.
+    if (DEFINED breakpad_SOURCE_DIR AND IS_DIRECTORY "${breakpad_SOURCE_DIR}/src")
+        set(_BREAKPAD_SRC "${breakpad_SOURCE_DIR}")
+    else()
+        set(_BREAKPAD_SRC "${CMAKE_CURRENT_SOURCE_DIR}/breakpad")
+    endif()
+
+    set(BREAKPAD_WIN32_DEFINES
+        NOMINMAX
+        UNICODE
+        WIN32_LEAN_AND_MEAN
+        _CRT_SECURE_NO_WARNINGS
+        _CRT_SECURE_NO_DEPRECATE
+        _CRT_NONSTDC_NO_DEPRECATE
+    )
+
+    # libbreakpad
+    add_library(libbreakpad STATIC)
+    file(GLOB_RECURSE LIBBREAKPAD_SOURCES ${_BREAKPAD_SRC}/src/processor/*.cc)
+    file(GLOB_RECURSE LIBDISASM_SOURCES ${_BREAKPAD_SRC}/src/third_party/libdisasm/*.c)
+    list(FILTER LIBBREAKPAD_SOURCES EXCLUDE REGEX "_unittest|_selftest|synth_minidump|/tests|/testdata|/solaris|microdump_stackwalk|minidump_dump|minidump_stackwalk")
+    if (WIN32)
+        list(FILTER LIBBREAKPAD_SOURCES EXCLUDE REGEX "/linux|/mac|/android")
+        target_compile_definitions(libbreakpad PRIVATE ${BREAKPAD_WIN32_DEFINES})
+        target_include_directories(libbreakpad PRIVATE "${CMAKE_GENERATOR_INSTANCE}/DIA SDK/include")
+    elseif (APPLE)
+        list(FILTER LIBBREAKPAD_SOURCES EXCLUDE REGEX "/linux|/windows|/android")
+    else()
+        list(FILTER LIBBREAKPAD_SOURCES EXCLUDE REGEX "/mac|/windows|/android")
+    endif()
+    target_sources(libbreakpad PRIVATE ${LIBBREAKPAD_SOURCES} ${LIBDISASM_SOURCES})
+    target_include_directories(libbreakpad
+        PUBLIC
+            ${_BREAKPAD_SRC}/src
+            ${_BREAKPAD_SRC}/src/third_party/libdisasm
+    )
+
+    # libbreakpad_client
+    add_library(libbreakpad_client STATIC)
+    file(GLOB LIBBREAKPAD_COMMON_SOURCES ${_BREAKPAD_SRC}/src/common/*.cc ${_BREAKPAD_SRC}/src/common/*.c ${_BREAKPAD_SRC}/src/client/*.cc)
+
+    if (WIN32)
+        file(GLOB_RECURSE LIBBREAKPAD_CLIENT_SOURCES ${_BREAKPAD_SRC}/src/client/windows/*.cc ${_BREAKPAD_SRC}/src/common/windows/*.cc)
+        list(FILTER LIBBREAKPAD_COMMON_SOURCES EXCLUDE REGEX "language.cc|path_helper.cc|stabs_to_module.cc|stabs_reader.cc|minidump_file_writer.cc")
+        target_include_directories(libbreakpad_client PRIVATE "${CMAKE_GENERATOR_INSTANCE}/DIA SDK/include")
+        target_compile_definitions(libbreakpad_client PRIVATE ${BREAKPAD_WIN32_DEFINES})
+    elseif (APPLE)
+        target_compile_definitions(libbreakpad_client PRIVATE HAVE_MACH_O_NLIST_H)
+        file(GLOB_RECURSE LIBBREAKPAD_CLIENT_SOURCES ${_BREAKPAD_SRC}/src/client/mac/*.cc ${_BREAKPAD_SRC}/src/common/mac/*.cc)
+        list(APPEND LIBBREAKPAD_CLIENT_SOURCES ${_BREAKPAD_SRC}/src/common/mac/MachIPC.mm)
+    else()
+        target_compile_definitions(libbreakpad_client PUBLIC -DHAVE_A_OUT_H)
+        file(GLOB_RECURSE LIBBREAKPAD_CLIENT_SOURCES ${_BREAKPAD_SRC}/src/client/linux/*.cc ${_BREAKPAD_SRC}/src/common/linux/*.cc)
+    endif()
+    list(APPEND LIBBREAKPAD_CLIENT_SOURCES ${LIBBREAKPAD_COMMON_SOURCES})
+    list(FILTER LIBBREAKPAD_CLIENT_SOURCES EXCLUDE REGEX "/sender|/tests|/unittests|/testcases|_unittest|_test")
+    target_sources(libbreakpad_client PRIVATE ${LIBBREAKPAD_CLIENT_SOURCES})
+    target_include_directories(libbreakpad_client PUBLIC ${_BREAKPAD_SRC}/src)
+
+    if (WIN32)
+        target_link_libraries(libbreakpad_client PRIVATE wininet.lib)
+    elseif (APPLE)
+        find_library(CoreFoundation_FRAMEWORK CoreFoundation)
+        target_link_libraries(libbreakpad_client PRIVATE ${CoreFoundation_FRAMEWORK})
+    else()
+        find_library(PTHREAD_LIBRARIES pthread)
+        target_compile_definitions(libbreakpad_client PRIVATE HAVE_GETCONTEXT=1)
+        if (PTHREAD_LIBRARIES)
+            target_link_libraries(libbreakpad_client PRIVATE ${PTHREAD_LIBRARIES})
+        endif()
+    endif()
+
+    # Host tools for symbol processing
+    if (LINUX)
+        find_package(ZLIB REQUIRED)
+
+        add_executable(minidump_stackwalk ${_BREAKPAD_SRC}/src/processor/minidump_stackwalk.cc)
+        target_link_libraries(minidump_stackwalk PRIVATE libbreakpad libbreakpad_client)
+
+        add_executable(dump_syms
+            ${_BREAKPAD_SRC}/src/common/dwarf_cfi_to_module.cc
+            ${_BREAKPAD_SRC}/src/common/dwarf_cu_to_module.cc
+            ${_BREAKPAD_SRC}/src/common/dwarf_line_to_module.cc
+            ${_BREAKPAD_SRC}/src/common/dwarf_range_list_handler.cc
+            ${_BREAKPAD_SRC}/src/common/language.cc
+            ${_BREAKPAD_SRC}/src/common/module.cc
+            ${_BREAKPAD_SRC}/src/common/path_helper.cc
+            ${_BREAKPAD_SRC}/src/common/stabs_reader.cc
+            ${_BREAKPAD_SRC}/src/common/stabs_to_module.cc
+            ${_BREAKPAD_SRC}/src/common/dwarf/bytereader.cc
+            ${_BREAKPAD_SRC}/src/common/dwarf/dwarf2diehandler.cc
+            ${_BREAKPAD_SRC}/src/common/dwarf/dwarf2reader.cc
+            ${_BREAKPAD_SRC}/src/common/dwarf/elf_reader.cc
+            ${_BREAKPAD_SRC}/src/common/linux/crc32.cc
+            ${_BREAKPAD_SRC}/src/common/linux/dump_symbols.cc
+            ${_BREAKPAD_SRC}/src/common/linux/elf_symbols_to_module.cc
+            ${_BREAKPAD_SRC}/src/common/linux/elfutils.cc
+            ${_BREAKPAD_SRC}/src/common/linux/file_id.cc
+            ${_BREAKPAD_SRC}/src/common/linux/linux_libc_support.cc
+            ${_BREAKPAD_SRC}/src/common/linux/memory_mapped_file.cc
+            ${_BREAKPAD_SRC}/src/common/linux/safe_readlink.cc
+            ${_BREAKPAD_SRC}/src/tools/linux/dump_syms/dump_syms.cc)
+        target_link_libraries(dump_syms PRIVATE libbreakpad_client ZLIB::ZLIB)
+    endif()
+endif()
+
+# SimpleIni
+if (NOT TARGET SimpleIni::SimpleIni)
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/simpleini/CMakeLists.txt")
+        add_subdirectory(simpleini)
+    endif()
+endif()

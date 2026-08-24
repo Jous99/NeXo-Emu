@@ -1,0 +1,470 @@
+// SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
+// SPDX-FileCopyrightText: Copyright 2025 citron Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include <chrono>
+#include <filesystem>
+#include <memory>
+#include <vector>
+#include "common/assert.h"
+#include "common/common_types.h"
+#include "common/logging.h"
+#include "common/settings.h"
+#include "common/uuid.h"
+#include "core/core.h"
+#include "core/file_sys/directory_save_data_filesystem.h"
+#include "core/file_sys/errors.h"
+#include "core/file_sys/savedata_extra_data_accessor.h"
+#include "core/file_sys/savedata_factory.h"
+#include "core/file_sys/vfs/vfs.h"
+#include "core/file_sys/vfs/vfs_real.h"
+#include "core/hle/service/acc/profile_manager.h"
+
+// [UNITY-FIX] winbase.h A/W macros shadow C++ method names.
+#undef DeleteFile
+#undef CreateFile
+#undef CopyFile
+#undef MoveFile
+#undef MoveFileEx
+#undef CreateDirectory
+#undef RemoveDirectory
+
+namespace FileSys {
+
+namespace {
+
+// Using a leaked raw pointer for the RealVfsFilesystem singleton.
+// This prevents SIGSEGV during shutdown by ensuring the VFS bridge
+// outlives all threads that might still be flushing save data.
+RealVfsFilesystem* GetPersistentVfs() {
+    static RealVfsFilesystem* instance = new RealVfsFilesystem();
+    return instance;
+}
+
+bool ShouldSaveDataBeAutomaticallyCreated(SaveDataSpaceId space, const SaveDataAttribute& attr) {
+    return attr.type == SaveDataType::Cache || attr.type == SaveDataType::Temporary ||
+           attr.type == SaveDataType::Bcat ||
+           (space == SaveDataSpaceId::User &&
+            (attr.type == SaveDataType::Account || attr.type == SaveDataType::Device) &&
+            attr.program_id == 0 && attr.system_save_data_id == 0);
+}
+
+// [NeXo] A real console provisions each title's BCAT delivery-cache save data (SaveDataType::
+// Bcat) proactively at install/first-launch time -- see Ryujinx-NeXo's `df268d0` commit,
+// which added exactly this step (`EnsureApplicationBcatDeliveryCacheStorage`) after discovering
+// Splatoon 3 (which uses the modern per-title BCAT storage) got refused with a same-looking
+// PermissionDenied/NotFound on every attempt, forever, while Splatoon 2 (legacy BCAT command)
+// never touched this path at all. Citron has no equivalent proactive step anywhere in its loader,
+// and `ShouldSaveDataBeAutomaticallyCreated` explicitly didn't cover SaveDataType::Bcat, so every
+// open of Splatoon 3's delivery-cache storage returned ResultTargetNotFound unconditionally, no
+// matter how long the game waited or retried. Auto-creating on first open (added above) reaches
+// the same end state a proactive boot-time step would, just lazily instead of eagerly -- there's
+// no real-hardware fidelity cost either way, since the directory's existence is the only thing
+// that mattered.
+
+std::string GetFutureSaveDataPath(SaveDataSpaceId space_id, SaveDataType type, u64 title_id,
+                                  u128 user_id) {
+    if (space_id != SaveDataSpaceId::User) {
+        return "";
+    }
+
+    Common::UUID uuid;
+    std::memcpy(uuid.uuid.data(), user_id.data(), sizeof(Common::UUID));
+
+    switch (type) {
+    case SaveDataType::Account:
+        return fmt::format("/user/save/account/{}/{:016X}/0", uuid.RawString(), title_id);
+    case SaveDataType::Device:
+        return fmt::format("/user/save/device/{:016X}/0", title_id);
+    default:
+        return "";
+    }
+}
+
+void BufferedVfsCopy(VirtualFile source, VirtualFile dest) {
+    if (!source || !dest) return;
+    const size_t source_size = source->GetSize();
+    if (source_size == 0) return;
+
+    try {
+        // Move buffer to heap to prevent stack exhaustion during deep recursion
+        auto buffer = std::make_unique<std::vector<u8>>(0x100000); // 1MB
+        dest->Resize(0);
+        size_t offset = 0;
+        while (offset < source_size) {
+            const size_t to_read = std::min(buffer->size(), source_size - offset);
+            source->Read(buffer->data(), to_read, offset);
+            dest->Write(buffer->data(), to_read, offset);
+            offset += to_read;
+        }
+    } catch (...) {
+        LOG_ERROR(Service_FS, "Mirroring: Buffer copy failed.");
+    }
+}
+
+} // Anonymous namespace
+
+SaveDataFactory::SaveDataFactory(Core::System& system_, ProgramId program_id_,
+                                 VirtualDir save_directory_, VirtualDir backup_directory_)
+    : system{system_}, program_id{program_id_}, dir{std::move(save_directory_)},
+      backup_dir{std::move(backup_directory_)} {
+    dir->DeleteSubdirectoryRecursive("temp");
+}
+
+SaveDataFactory::~SaveDataFactory() = default;
+
+namespace {
+// [NeXo] The real "bcat" sysmodule's system title ID -- confirmed against
+// Ryujinx-NeXo's own fix (VirtualFileSystem.cs FixExtraData, commit 515040a) and matching
+// what LibHac itself stamps when it creates BCAT storage (Fs.Shim.SaveDataManagement.
+// CreateBcatSaveData), and what already-working titles' real caches carry (Splatoon 2, SSBU,
+// Animal Crossing).
+constexpr u64 SystemProgramIdBcat = 0x010000000000000CULL;
+
+// [NeXo] The size a real console's BCAT delivery cache is provisioned with (64MiB data,
+// 2MiB journal) -- same values Ryujinx-NeXo's fix uses, matching what a real NACP declares
+// for titles that use BCAT and what healthy caches on disk already carry.
+constexpr s64 DefaultBcatDeliveryCacheStorageSize = 0x4000000;
+constexpr s64 DefaultBcatDeliveryCacheJournalSize = 0x200000;
+} // namespace
+
+VirtualDir SaveDataFactory::Create(SaveDataSpaceId space, const SaveDataAttribute& meta) const {
+    const auto save_directory = GetFullPath(program_id, dir, space, meta.type, meta.program_id,
+                                            meta.user_id, meta.system_save_data_id);
+
+    auto save_dir = dir->CreateDirectoryRelative(save_directory);
+    if (save_dir == nullptr) {
+        return nullptr;
+    }
+
+    // [NeXo] A BCAT delivery cache is owned by the system's "bcat" module, never the game
+    // that requested it -- stamping it with the game's own program ID (the naive default below)
+    // makes the save unopenable: LibHac-style access control compares the save's owner against
+    // the calling program, finds no match, and refuses with PermissionDenied. Splatoon 3 hits
+    // this wall at startup. See Ryujinx-NeXo's own fix for this exact bug (515040a).
+    const bool is_bcat_save = meta.type == SaveDataType::Bcat || meta.type == SaveDataType::SystemBcat;
+
+    SaveDataExtraDataAccessor accessor(save_dir);
+    if (accessor.Initialize(true) == ResultSuccess) {
+        SaveDataExtraData initial_data{};
+        initial_data.attr = meta;
+        initial_data.owner_id = is_bcat_save ? SystemProgramIdBcat : meta.program_id;
+        initial_data.timestamp = std::chrono::system_clock::now().time_since_epoch().count();
+        initial_data.flags = static_cast<u32>(SaveDataFlags::None);
+        initial_data.available_size = is_bcat_save ? DefaultBcatDeliveryCacheStorageSize : 0;
+        initial_data.journal_size = is_bcat_save ? DefaultBcatDeliveryCacheJournalSize : 0;
+        initial_data.commit_id = 1;
+
+        accessor.WriteExtraData(initial_data);
+        accessor.CommitExtraData();
+    }
+
+    return save_dir;
+}
+
+VirtualDir SaveDataFactory::Open(SaveDataSpaceId space, const SaveDataAttribute& meta) const {
+    const auto save_directory = GetFullPath(program_id, dir, space, meta.type, meta.program_id,
+                                            meta.user_id, meta.system_save_data_id);
+
+    auto out = dir->GetDirectoryRelative(save_directory);
+
+    if (out == nullptr && (ShouldSaveDataBeAutomaticallyCreated(space, meta) && auto_create)) {
+        return Create(space, meta);
+    }
+
+    return out;
+}
+
+VirtualDir SaveDataFactory::GetSaveDataSpaceDirectory(SaveDataSpaceId space) const {
+    return dir->GetDirectoryRelative(GetSaveDataSpaceIdPath(space));
+}
+
+std::string SaveDataFactory::GetSaveDataSpaceIdPath(SaveDataSpaceId space) {
+    switch (space) {
+    case SaveDataSpaceId::System:
+    case SaveDataSpaceId::ProperSystem:
+    case SaveDataSpaceId::SafeMode:
+        return "/system/";
+    case SaveDataSpaceId::User:
+        return "/user/";
+    case SaveDataSpaceId::Temporary:
+        return "/temp/";
+    case SaveDataSpaceId::SdSystem:
+    case SaveDataSpaceId::SdUser:
+        return "/sd/";
+    default:
+        return "/unrecognized/";
+    }
+}
+
+std::string SaveDataFactory::GetFullPath(ProgramId program_id, VirtualDir dir,
+                                         SaveDataSpaceId space, SaveDataType type, u64 title_id,
+                                         u128 user_id, u64 save_id) {
+    if ((type == SaveDataType::Account || type == SaveDataType::Device) && title_id == 0) {
+        title_id = program_id;
+    }
+
+    if (std::string future_path = GetFutureSaveDataPath(space, type, title_id & ~(0xFFULL), user_id);
+        !future_path.empty()) {
+        if (dir->GetDirectoryRelative(future_path) != nullptr) {
+            return future_path;
+        }
+    }
+
+    std::string out = GetSaveDataSpaceIdPath(space);
+    switch (type) {
+    case SaveDataType::System:
+        return fmt::format("{}save/{:016X}/{:016X}{:016X}", out, save_id, user_id[1], user_id[0]);
+    case SaveDataType::Account:
+    case SaveDataType::Device:
+        return fmt::format("{}save/{:016X}/{:016X}{:016X}/{:016X}", out, 0, user_id[1], user_id[0], title_id);
+    case SaveDataType::Temporary:
+        return fmt::format("{}{:016X}/{:016X}{:016X}/{:016X}", out, 0, user_id[1], user_id[0], title_id);
+    case SaveDataType::Cache:
+        return fmt::format("{}save/cache/{:016X}", out, title_id);
+    default:
+        return fmt::format("{}save/unknown_{:X}/{:016X}", out, static_cast<u8>(type), title_id);
+    }
+}
+
+std::string SaveDataFactory::GetUserGameSaveDataRoot(u128 user_id, bool future) {
+    if (future) {
+        Common::UUID uuid;
+        std::memcpy(uuid.uuid.data(), user_id.data(), sizeof(Common::UUID));
+        return fmt::format("/user/save/account/{}", uuid.RawString());
+    }
+    return fmt::format("/user/save/{:016X}/{:016X}{:016X}", 0, user_id[1], user_id[0]);
+}
+
+SaveDataSize SaveDataFactory::ReadSaveDataSize(SaveDataType type, u64 title_id, u128 user_id) const {
+    const auto path = GetFullPath(program_id, dir, SaveDataSpaceId::User, type, title_id, user_id, 0);
+    const auto relative_dir = GetOrCreateDirectoryRelative(dir, path);
+    const auto size_file = relative_dir->GetFile(GetSaveDataSizeFileName());
+    if (size_file == nullptr || size_file->GetSize() < sizeof(SaveDataSize)) return {0, 0};
+    SaveDataSize out;
+    if (size_file->ReadObject(&out) != sizeof(SaveDataSize)) return {0, 0};
+    return out;
+}
+
+void SaveDataFactory::WriteSaveDataSize(SaveDataType type, u64 title_id, u128 user_id, SaveDataSize new_value) const {
+    const auto path = GetFullPath(program_id, dir, SaveDataSpaceId::User, type, title_id, user_id, 0);
+    const auto relative_dir = GetOrCreateDirectoryRelative(dir, path);
+    const auto size_file = relative_dir->CreateFile(GetSaveDataSizeFileName());
+    if (size_file == nullptr) return;
+    size_file->Resize(sizeof(SaveDataSize));
+    size_file->WriteObject(new_value);
+}
+
+void SaveDataFactory::SetAutoCreate(bool state) {
+    auto_create = state;
+}
+
+Result SaveDataFactory::ReadSaveDataExtraData(SaveDataExtraData* out_extra_data, SaveDataSpaceId space, const SaveDataAttribute& attribute) const {
+    const auto save_directory = GetFullPath(program_id, dir, space, attribute.type, attribute.program_id, attribute.user_id, attribute.system_save_data_id);
+    auto save_dir = dir->GetDirectoryRelative(save_directory);
+    if (save_dir == nullptr) return ResultPathNotFound;
+    SaveDataExtraDataAccessor accessor(save_dir);
+    if (accessor.Initialize(false) != ResultSuccess) {
+        *out_extra_data = {};
+        out_extra_data->attr = attribute;
+        return ResultSuccess;
+    }
+    return accessor.ReadExtraData(out_extra_data);
+}
+
+Result SaveDataFactory::WriteSaveDataExtraData(const SaveDataExtraData& extra_data, SaveDataSpaceId space, const SaveDataAttribute& attribute) const {
+    const auto save_directory = GetFullPath(program_id, dir, space, attribute.type, attribute.program_id, attribute.user_id, attribute.system_save_data_id);
+    auto save_dir = dir->GetDirectoryRelative(save_directory);
+    if (save_dir == nullptr) return ResultPathNotFound;
+    SaveDataExtraDataAccessor accessor(save_dir);
+    R_TRY(accessor.Initialize(true));
+    R_TRY(accessor.WriteExtraData(extra_data));
+    return accessor.CommitExtraData();
+}
+
+Result SaveDataFactory::WriteSaveDataExtraDataWithMask(const SaveDataExtraData& extra_data, const SaveDataExtraData& mask, SaveDataSpaceId space, const SaveDataAttribute& attribute) const {
+    const auto save_directory = GetFullPath(program_id, dir, space, attribute.type, attribute.program_id, attribute.user_id, attribute.system_save_data_id);
+    auto save_dir = dir->GetDirectoryRelative(save_directory);
+    if (save_dir == nullptr) return ResultPathNotFound;
+    SaveDataExtraDataAccessor accessor(save_dir);
+    R_TRY(accessor.Initialize(true));
+    SaveDataExtraData current_data{};
+    R_TRY(accessor.ReadExtraData(&current_data));
+    const u8* extra_data_bytes = reinterpret_cast<const u8*>(&extra_data);
+    const u8* mask_bytes = reinterpret_cast<const u8*>(&mask);
+    u8* current_data_bytes = reinterpret_cast<u8*>(&current_data);
+    for (size_t i = 0; i < sizeof(SaveDataExtraData); ++i) {
+        if (mask_bytes[i] != 0) current_data_bytes[i] = extra_data_bytes[i];
+    }
+    R_TRY(accessor.WriteExtraData(current_data));
+    return accessor.CommitExtraData();
+}
+
+// --- MIRRORING TOOLS ---
+
+VirtualDir SaveDataFactory::GetMirrorDirectory(u64 title_id) const {
+    auto it = Settings::values.mirrored_save_paths.find(title_id);
+    if (it == Settings::values.mirrored_save_paths.end() || it->second.empty()) return nullptr;
+
+    std::filesystem::path host_path(it->second);
+    if (!std::filesystem::exists(host_path)) return nullptr;
+
+    // Get the persistent VFS bridge
+    auto* vfs = GetPersistentVfs();
+    return vfs->OpenDirectory(it->second, OpenMode::ReadWrite);
+}
+
+void SaveDataFactory::SmartSyncFromSource(VirtualDir source, VirtualDir dest) const {
+    if (!source || !dest || system.IsShuttingDown()) {
+        return;
+    }
+
+    // Sync files
+    const auto files = source->GetFiles();
+    for (const auto& s_file : files) {
+        if (!s_file) continue;
+        const std::string name = s_file->GetName();
+
+        if (name == ".lock" || name == ".citron_save_size" || name.find("mirror_backup") != std::string::npos) {
+            continue;
+        }
+
+        auto d_file = dest->CreateFile(name);
+        if (d_file) {
+            BufferedVfsCopy(s_file, d_file);
+        }
+    }
+
+    // Sync subdirectories
+    const auto subdirs = source->GetSubdirectories();
+    for (const auto& s_subdir : subdirs) {
+        if (!s_subdir) continue;
+        const std::string sub_name = s_subdir->GetName();
+
+        // Recursion guard for title-id folders
+        if (sub_name.find("0100") != std::string::npos) continue;
+
+        auto d_subdir = dest->GetDirectoryRelative(sub_name);
+        if (!d_subdir) {
+            d_subdir = dest->CreateDirectoryRelative(sub_name);
+        }
+
+        if (d_subdir) {
+            SmartSyncFromSource(s_subdir, d_subdir);
+        }
+    }
+}
+
+void SaveDataFactory::PerformStartupMirrorSync() const {
+    // If settings are empty or system is shutting down/uninitialized
+    if (Settings::values.mirrored_save_paths.empty() || system.IsShuttingDown()) {
+        return;
+    }
+
+    // Ensure our NAND directory is actually valid
+    if (!dir) {
+        LOG_ERROR(Service_FS, "Mirroring: Startup Sync aborted. NAND directory is null.");
+        return;
+    }
+
+    // Attempt to locate the save root with null checks at every step
+    VirtualDir user_save_root = nullptr;
+    try {
+        user_save_root = dir->GetDirectoryRelative("user/save/0000000000000000");
+        if (!user_save_root) {
+            user_save_root = dir->GetDirectoryRelative("user/save");
+        }
+    } catch (...) {
+        LOG_ERROR(Service_FS, "Mirroring: Critical failure accessing VFS. Filesystem may be stale.");
+        return;
+    }
+
+    if (!user_save_root) {
+        LOG_WARNING(Service_FS, "Mirroring: Could not find user save root in NAND.");
+        return;
+    }
+
+    LOG_INFO(Service_FS, "Mirroring: Startup Sync initiated.");
+
+    for (const auto& [title_id, host_path] : Settings::values.mirrored_save_paths) {
+        if (host_path.empty()) continue;
+
+        auto mirror_source = GetMirrorDirectory(title_id);
+        if (!mirror_source) continue;
+
+        std::string title_id_str = fmt::format("{:016X}", title_id);
+
+        for (const auto& profile_dir : user_save_root->GetSubdirectories()) {
+            if (!profile_dir) continue;
+
+            auto nand_dest = profile_dir->GetDirectoryRelative(title_id_str);
+
+            if (!nand_dest) {
+                for (const auto& sub : profile_dir->GetSubdirectories()) {
+                    if (!sub) continue;
+                    nand_dest = sub->GetDirectoryRelative(title_id_str);
+                    if (nand_dest) break;
+                }
+            }
+
+            if (nand_dest) {
+                LOG_INFO(Service_FS, "Mirroring: Pulling external data for {}", title_id_str);
+                SmartSyncFromSource(mirror_source, nand_dest);
+            }
+        }
+    }
+}
+
+VirtualDir SaveDataFactory::GetTitleSaveDirectory(u64 title_id) const {
+    if (!dir) {
+        return nullptr;
+    }
+
+    VirtualDir user_save_root = dir->GetDirectoryRelative("user/save/0000000000000000");
+    if (!user_save_root) {
+        user_save_root = dir->GetDirectoryRelative("user/save");
+    }
+    if (!user_save_root) {
+        return nullptr;
+    }
+
+    const std::string title_id_str = fmt::format("{:016X}", title_id);
+    for (const auto& profile_dir : user_save_root->GetSubdirectories()) {
+        if (!profile_dir) {
+            continue;
+        }
+        auto save_dir = profile_dir->GetDirectoryRelative(title_id_str);
+        if (!save_dir) {
+            for (const auto& sub : profile_dir->GetSubdirectories()) {
+                if (!sub) {
+                    continue;
+                }
+                save_dir = sub->GetDirectoryRelative(title_id_str);
+                if (save_dir) {
+                    break;
+                }
+            }
+        }
+        if (save_dir) {
+            return save_dir;
+        }
+    }
+    return nullptr;
+}
+
+void SaveDataFactory::DoNandBackup(SaveDataSpaceId space, const SaveDataAttribute& meta, VirtualDir custom_dir) const {
+    u64 title_id = (meta.program_id != 0 ? meta.program_id : static_cast<u64>(program_id));
+    if (Settings::values.mirrored_save_paths.count(title_id)) return;
+
+    if (!Settings::values.backup_saves_to_nand.GetValue() || backup_dir == nullptr || custom_dir == nullptr) return;
+
+    const auto nand_path = GetFullPath(program_id, backup_dir, space, meta.type, meta.program_id, meta.user_id, meta.system_save_data_id);
+    auto nand_out = backup_dir->CreateDirectoryRelative(nand_path);
+
+    if (nand_out) {
+        nand_out->CleanSubdirectoryRecursive(".");
+        VfsRawCopyD(custom_dir, nand_out);
+    }
+}
+
+} // namespace FileSys

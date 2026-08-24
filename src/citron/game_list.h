@@ -1,0 +1,339 @@
+// SPDX-FileCopyrightText: 2015 Citra Emulator Project
+// SPDX-FileCopyrightText: 2026 citron Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#pragma once
+#include "citron/util/controller_navigation.h"
+
+#include <map>
+#include <utility>
+#include <QEvent>
+#include <QFileSystemWatcher>
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QLineEdit>
+#include <QList>
+#include <QListView>
+#include <QMouseEvent>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QObject>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QResizeEvent>
+#include <QSlider>
+#include <QStackedWidget>
+#include <QStandardItemModel>
+#include <QString>
+#include <QTimer>
+#include <QToolButton>
+#include <QTreeView>
+#include <QVBoxLayout>
+#include <QVector>
+#include <QWidget>
+
+
+#include "citron/compatibility_list.h"
+#include "citron/multiplayer/state.h"
+#include "citron/play_time_manager.h"
+#include "common/common_types.h"
+#include "core/core.h"
+#include "uisettings.h"
+
+class ControllerNavigation;
+class GameListWorker;
+class GameListSearchField;
+class GameListDir;
+class GameListLoadingOverlay;
+class GameListDelegate;
+class GameGridDelegate;
+class GameDetailsPanel;
+class GameTreeView;
+class GameCarouselView;
+class GameGridView;
+namespace Citron {
+class SteamGridDB;
+}
+class GMainWindow;
+enum class AmLaunchType;
+enum class StartGameType;
+
+namespace FileSys {
+class ManualContentProvider;
+class VfsFilesystem;
+} // namespace FileSys
+
+enum class GameListOpenTarget {
+    SaveData,
+    ModData,
+    BcatData,
+};
+
+enum class GameListRemoveTarget {
+    VkShaderCache,
+    AllShaderCache,
+    CustomConfiguration,
+    CacheStorage,
+};
+
+enum class DumpRomFSTarget {
+    Normal,
+    SDMC,
+};
+
+enum class GameListShortcutTarget {
+    Desktop,
+    Applications,
+};
+
+enum class InstalledEntryType {
+    Game,
+    Update,
+    AddOnContent,
+};
+
+class GameList : public QWidget {
+    Q_OBJECT
+
+public:
+    enum {
+        COLUMN_NAME,
+        COLUMN_COMPATIBILITY,
+        COLUMN_ADD_ONS,
+        COLUMN_FILE_TYPE,
+        COLUMN_SIZE,
+        COLUMN_PLAY_TIME,
+        COLUMN_ONLINE,
+        COLUMN_COUNT, // Number of columns
+    };
+
+    explicit GameList(std::shared_ptr<FileSys::VfsFilesystem> vfs_,
+                      FileSys::ManualContentProvider* provider_,
+                      PlayTime::PlayTimeManager& play_time_manager_, Core::System& system_,
+                      GMainWindow* parent = nullptr);
+    ~GameList() override;
+
+    QString GetLastFilterResultItem() const;
+    void ClearFilter();
+    void SetFilterFocus();
+    void SetFilterVisible(bool visibility);
+    bool IsEmpty() const;
+
+    void LoadCompatibilityList();
+    void PopulateAsync(QVector<UISettings::GameDir>& game_dirs, bool is_smart_update = false);
+    void CancelPopulation();
+    void RefreshGame(u64 program_id, u64 play_time);
+    void RefreshTheme();
+    void ApplyCarouselBackdropImage();
+
+    void SaveInterfaceLayout();
+    void LoadInterfaceLayout();
+    void ClearLaunchOverlays();
+
+    enum class ViewMode { List, Grid, Carousel };
+    void SetViewMode(ViewMode mode);
+    ViewMode GetViewMode() const;
+    void ToggleViewMode();
+    void SortAlphabetically();
+    void ToggleSortOrder();
+
+    QStandardItemModel* GetModel() const;
+    QString GetGamePath(u64 program_id) const;
+    QWidget* GetToolbarWidget() const {
+        return toolbar;
+    }
+    void SetToolbarInMain(bool state) {
+        toolbar_in_main = state;
+    }
+
+    /// Disables events from the emulated controller
+    void UnloadController();
+    void LoadController();
+    void JumpToNextLetter();
+
+    static QString GenerateAddonsTooltip(const QString& patch_versions);
+
+    static const QStringList supported_file_extensions;
+
+signals:
+    void BootGame(const QString& game_path, StartGameType type);
+    void GameChosen(const QString& game_path, const u64 title_id = 0);
+    void OpenFolderRequested(u64 program_id, GameListOpenTarget target,
+                             const std::string& game_path);
+    void OpenTransferableShaderCacheRequested(u64 program_id);
+    void RemoveInstalledEntryRequested(u64 program_id, InstalledEntryType type);
+    void RemoveFileRequested(u64 program_id, GameListRemoveTarget target,
+                             const std::string& game_path);
+    void RemovePlayTimeRequested(u64 program_id);
+    void DumpRomFSRequested(u64 program_id, const std::string& game_path, DumpRomFSTarget target);
+    void VerifyIntegrityRequested(const std::string& game_path);
+    void CopyTIDRequested(u64 program_id);
+    void CreateShortcut(u64 program_id, const std::string& game_path,
+                        GameListShortcutTarget target);
+    void NavigateToGamedbEntryRequested(u64 program_id,
+                                        const CompatibilityList& compatibility_list);
+    void OpenPerGameGeneralRequested(const std::string& file, u64 program_id = 0);
+    void OpenDirectory(const QString& directory);
+    void AddDirectory();
+    void ShowList(bool show);
+    void PopulatingCompleted();
+    void SaveConfig();
+    void OpenNeXoAccountRequested();
+
+public slots:
+    void OnConfigurationChanged();
+    void SwitchToControllerMode();
+    void SwitchToKeyboardMode();
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
+
+private slots:
+    void OnEmulationEnded();
+    void onSurpriseMeClicked();
+    void UpdateProgressBarColor();
+    void UpdateAccentColorStyles();
+    void OnItemExpanded(const QModelIndex& item);
+    void OnTextChanged(const QString& new_text);
+    void OnFilterCloseClicked();
+    void OnUpdateThemedIcons();
+    void UpdateOnlineStatus();
+    void OnOnlineStatusUpdated(const std::map<u64, std::pair<int, int>>& online_stats);
+    void onControllerFocusChanged(ControllerNavigation::FocusTarget target);
+
+protected:
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+
+private:
+    friend class GameListWorker;
+
+    void AddDirEntry(GameListDir* entry_items);
+    void AddEntry(const QList<QStandardItem*>& entry_items, const QString& parent_path);
+    void DonePopulating(const QStringList& watch_list);
+
+private:
+    void ValidateEntry(const QModelIndex& item);
+
+    void RefreshGameDirectory();
+
+    void ToggleFavorite(u64 program_id);
+    void AddFavorite(u64 program_id);
+    void RemoveFavorite(u64 program_id);
+
+    void OnSelectionChanged(const QModelIndex& item);
+    void StartLaunchAnimation(const QModelIndex& item);
+    void SaveGameListIndex();
+    void LoadGameListIndex();
+    void RefreshTooltips();
+    void ToggleHidden(const QString& path);
+    void UpdateCarouselSelection();
+    void SuspendAnimations(bool suspend);
+    void AnimateDetailsPanel(bool show);
+
+    void ShowTechnicalInformation(const QModelIndex& index);
+
+    void UpdateIconForGame(u64 program_id);
+    void ShowIconSelectionDialog(u64 program_id, const QString& game_name);
+    void ShowPosterSelectionDialog(u64 program_id, const QString& game_name);
+    void PopulateGridView();
+    void FilterGridView(const QString& filter_text);
+    void AutoPopulatePosters();
+    void FilterTreeView(const QString& filter_text);
+
+    void PopupContextMenu(const QPoint& menu_location);
+    void AddGamePopup(QMenu& context_menu, const QModelIndex& index, u64 program_id,
+                      const std::string& path, const QString& game_name);
+    void AddCustomDirPopup(QMenu& context_menu, QModelIndex selected,
+                           bool show_hidden_action = true);
+    void AddPermDirPopup(QMenu& context_menu, QModelIndex selected);
+    void AddFavoritesPopup(QMenu& context_menu);
+
+    void changeEvent(QEvent*) override;
+    void RetranslateUI();
+    void UpdateSortButtonIcon();
+    QIcon GetThemedIcon(const QString& path, bool force_light = false);
+
+    std::shared_ptr<FileSys::VfsFilesystem> vfs;
+    FileSys::ManualContentProvider* provider;
+    GameListSearchField* search_field;
+    GMainWindow* main_window = nullptr;
+    QVBoxLayout* layout = nullptr;
+    QWidget* toolbar = nullptr;
+    QWidget* fade_overlay;
+    QHBoxLayout* toolbar_layout = nullptr;
+    QToolButton* btn_list_view = nullptr;
+    QToolButton* btn_grid_view = nullptr;
+    QToolButton* btn_carousel_view = nullptr;
+    QSlider* slider_title_size = nullptr;
+    QToolButton* btn_slider_font_mode = nullptr;
+    QToolButton* btn_slider_icon_mode = nullptr;
+    bool slider_icon_mode = false; // false = font size, true = icon size
+    QToolButton* btn_sort_az = nullptr;
+    QToolButton* btn_surprise_me = nullptr;
+    QToolButton* btn_controller_settings = nullptr;
+    Qt::SortOrder current_sort_order = Qt::AscendingOrder;
+    QStandardItemModel* item_model = nullptr;
+    GameDetailsPanel* details_panel = nullptr;
+
+    QStackedWidget* main_stack = nullptr;
+    GameTreeView* tree_view = nullptr;
+    GameGridView* grid_view = nullptr;
+    GameCarouselView* carousel_view = nullptr;
+
+    GameListLoadingOverlay* loading_overlay = nullptr;
+    std::unique_ptr<GameListWorker> current_worker;
+    QProgressBar* progress_bar = nullptr;
+    QFileSystemWatcher* watcher = nullptr;
+    ControllerNavigation* controller_navigation = nullptr;
+    CompatibilityList compatibility_list;
+    QTimer* online_status_timer;
+    QTimer config_update_timer;
+    QTimer* m_resize_timer = nullptr;
+
+    QNetworkAccessManager* network_manager = nullptr;
+    Citron::SteamGridDB* m_steam_grid_db = nullptr;
+    void RefreshCompatibilityList();
+
+    friend class GameListSearchField;
+
+    PlayTime::PlayTimeManager& play_time_manager;
+    Core::System& system;
+    bool toolbar_in_main = false;
+    class NavigationSettingsOverlay* m_nav_overlay = nullptr;
+    bool m_is_controller_mode = false;
+    bool m_is_launching = false;
+    bool m_is_surprise_active = false;
+
+    QWidget* footer_widget = nullptr;
+};
+
+class GameListPlaceholder : public QWidget {
+    Q_OBJECT
+public:
+    explicit GameListPlaceholder(GMainWindow* parent = nullptr);
+    ~GameListPlaceholder();
+
+signals:
+    void AddDirectory();
+
+private slots:
+    void onUpdateThemedIcons();
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+
+private:
+    void changeEvent(QEvent* event) override;
+    void RetranslateUI();
+
+    QVBoxLayout* layout = nullptr;
+    QLabel* image = nullptr;
+    QLabel* text = nullptr;
+};

@@ -1,0 +1,328 @@
+// SPDX-FileCopyrightText: Copyright 2022 yuzu Emulator Project
+// SPDX-FileCopyrightText: Copyright 2025 citron Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include <algorithm>
+#include <utility>
+#include <vector>
+
+#include <fmt/format.h>
+
+#include "citron/util/title_ids.h"
+#include "common/alignment.h"
+#include "common/assert.h"
+#include "common/bit_util.h"
+#include "common/common_types.h"
+#include "common/literals.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_staging_buffer_pool.h"
+#include "video_core/vulkan_common/vulkan_device.h"
+#include "video_core/vulkan_common/vulkan_wrapper.h"
+
+namespace Vulkan {
+namespace {
+
+using namespace Common::Literals;
+
+// Maximum potential alignment of a Vulkan buffer
+constexpr VkDeviceSize MAX_ALIGNMENT = 256;
+
+size_t GetStreamBufferSize(const Device& device) {
+    VkDeviceSize size{0};
+    ForEachDeviceLocalHostVisibleHeap(device, [&size](size_t index, VkMemoryHeap& heap) {
+        size = (std::max)(size, heap.size);
+    });
+    return (std::min)(Common::AlignUp(size / 16, 256), 128_MiB);
+}
+} // Anonymous namespace
+
+StagingBufferPool::StagingBufferPool(const Device& device_, MemoryAllocator& memory_allocator_,
+                                     Scheduler& scheduler_)
+    : device{device_}, memory_allocator{memory_allocator_}, scheduler{scheduler_},
+      stream_buffer_size{GetStreamBufferSize(device)},
+      region_size{stream_buffer_size / StagingBufferPool::NUM_SYNCS} {
+    VkBufferCreateInfo stream_ci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .size = stream_buffer_size,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+    };
+    if (device.IsExtTransformFeedbackSupported()) {
+        stream_ci.usage |= VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
+    }
+    stream_buffer = memory_allocator.CreateBuffer(stream_ci, MemoryUsage::Stream);
+    if (device.HasDebuggingToolAttached()) {
+        stream_buffer.SetObjectNameEXT("Stream Buffer");
+    }
+    stream_pointer = stream_buffer.Mapped();
+    ASSERT_MSG(!stream_pointer.empty(), "Stream buffer must be host visible!");
+}
+
+StagingBufferPool::~StagingBufferPool() = default;
+
+StagingBufferRef StagingBufferPool::Request(size_t size, MemoryUsage usage, bool deferred) {
+    if (!deferred && usage == MemoryUsage::Upload && size <= region_size) {
+        return GetStreamBuffer(size);
+    }
+    return GetStagingBuffer(size, usage, deferred);
+}
+
+void StagingBufferPool::FreeDeferred(StagingBufferRef& ref) {
+    auto& entries = GetCache(ref.usage)[ref.log2_level].entries;
+    const auto is_this_one = [&ref](const StagingBuffer& entry) {
+        return entry.index == ref.index;
+    };
+    auto it = std::find_if(entries.begin(), entries.end(), is_this_one);
+    ASSERT(it != entries.end());
+    ASSERT(it->deferred);
+    it->tick = scheduler.CurrentTick();
+    it->deferred = false;
+}
+
+void StagingBufferPool::TickFrame() {
+    static constexpr size_t LEVELS_PER_TICK = 4;
+    for (size_t i = 0; i < LEVELS_PER_TICK; ++i) {
+        current_delete_level = (current_delete_level + 1) % NUM_LEVELS;
+        ReleaseCache(MemoryUsage::DeviceLocal);
+        ReleaseCache(MemoryUsage::Upload);
+        ReleaseCache(MemoryUsage::Download);
+    }
+}
+
+u64 StagingBufferPool::GetMemoryUsage() const {
+    u64 total_usage = stream_buffer_size;
+
+    // Add usage from all staging buffer caches
+    const auto& device_local_entries = device_local_cache;
+    const auto& upload_entries = upload_cache;
+    const auto& download_entries = download_cache;
+
+    for (const auto& level_entries : device_local_entries) {
+        for (const auto& entry : level_entries.entries) {
+            if (entry.buffer) {
+                // Estimate buffer size from log2 level
+                u64 buffer_size = 1ULL << entry.log2_level;
+                total_usage += buffer_size;
+            }
+        }
+    }
+
+    for (const auto& level_entries : upload_entries) {
+        for (const auto& entry : level_entries.entries) {
+            if (entry.buffer) {
+                u64 buffer_size = 1ULL << entry.log2_level;
+                total_usage += buffer_size;
+            }
+        }
+    }
+
+    for (const auto& level_entries : download_entries) {
+        for (const auto& entry : level_entries.entries) {
+            if (entry.buffer) {
+                u64 buffer_size = 1ULL << entry.log2_level;
+                total_usage += buffer_size;
+            }
+        }
+    }
+
+    return total_usage;
+}
+
+StagingBufferRef StagingBufferPool::GetStreamBuffer(size_t size) {
+    if (AreRegionsActive(Region(free_iterator) + 1,
+                         std::min(Region(iterator + size) + 1, NUM_SYNCS))) {
+        // Avoid waiting for the previous usages to be free
+        return GetStagingBuffer(size, MemoryUsage::Upload);
+    }
+    const u64 current_tick = scheduler.CurrentTick();
+    std::fill(sync_ticks.begin() + Region(used_iterator), sync_ticks.begin() + Region(iterator),
+              current_tick);
+    used_iterator = iterator;
+    free_iterator = std::max(free_iterator, iterator + size);
+
+    if (iterator + size >= stream_buffer_size) {
+        std::fill(sync_ticks.begin() + Region(used_iterator), sync_ticks.begin() + NUM_SYNCS,
+                  current_tick);
+        used_iterator = 0;
+        iterator = 0;
+        free_iterator = size;
+
+        if (AreRegionsActive(0, Region(size) + 1)) {
+            // Avoid waiting for the previous usages to be free
+            return GetStagingBuffer(size, MemoryUsage::Upload);
+        }
+    }
+    const size_t offset = iterator;
+    iterator = Common::AlignUp(iterator + size, MAX_ALIGNMENT);
+    return StagingBufferRef{
+        .buffer = *stream_buffer,
+        .offset = static_cast<VkDeviceSize>(offset),
+        .mapped_span = stream_pointer.subspan(offset, size),
+        .usage{},
+        .log2_level{},
+        .index{},
+    };
+}
+
+bool StagingBufferPool::AreRegionsActive(size_t region_begin, size_t region_end) const {
+    const u64 gpu_tick = scheduler.GetMasterSemaphore().KnownGpuTick();
+    return std::any_of(sync_ticks.begin() + region_begin, sync_ticks.begin() + region_end,
+                       [gpu_tick](u64 sync_tick) { return gpu_tick < sync_tick; });
+};
+
+StagingBufferRef StagingBufferPool::GetStagingBuffer(size_t size, MemoryUsage usage,
+                                                     bool deferred) {
+    if (const std::optional<StagingBufferRef> ref = TryGetReservedBuffer(size, usage, deferred)) {
+        return *ref;
+    }
+    return CreateStagingBuffer(size, usage, deferred);
+}
+
+std::optional<StagingBufferRef> StagingBufferPool::TryGetReservedBuffer(size_t size,
+                                                                        MemoryUsage usage,
+                                                                        bool deferred) {
+    StagingBuffers& cache_level = GetCache(usage)[Common::Log2Ceil64(size)];
+
+    const auto is_free = [this](const StagingBuffer& entry) {
+        return !entry.deferred && scheduler.IsFree(entry.tick);
+    };
+    auto& entries = cache_level.entries;
+    const auto hint_it = entries.begin() + cache_level.iterate_index;
+    auto it = std::find_if(entries.begin() + cache_level.iterate_index, entries.end(), is_free);
+    if (it == entries.end()) {
+        it = std::find_if(entries.begin(), hint_it, is_free);
+        if (it == hint_it) {
+            return std::nullopt;
+        }
+    }
+    cache_level.iterate_index = std::distance(entries.begin(), it) + 1;
+    it->tick = deferred ? std::numeric_limits<u64>::max() : scheduler.CurrentTick();
+    ASSERT(!it->deferred);
+    it->deferred = deferred;
+    return it->Ref();
+}
+
+StagingBufferRef StagingBufferPool::CreateStagingBuffer(size_t size, MemoryUsage usage,
+                                                        bool deferred) {
+    u32 log2 = Common::Log2Ceil64(size);
+
+    // Only apply this workaround for Marvel Cosmic Invasion
+    if (program_id == UICommon::TitleID::MarvelCosmicInvasion) {
+        static constexpr u32 MAX_STAGING_BUFFER_LOG2 = 31U;
+        // Calculate log2 of requested size, but clamp to maximum to prevent overflow
+        // This ensures we still round up to the next power of 2, but cap at 2GB
+        log2 = std::min(log2, MAX_STAGING_BUFFER_LOG2);
+    }
+    VkBufferCreateInfo buffer_ci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .size = 1ULL << log2,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+    };
+    if (device.IsExtTransformFeedbackSupported()) {
+        buffer_ci.usage |= VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
+    }
+    vk::Buffer buffer = memory_allocator.CreateBuffer(buffer_ci, usage);
+    if (device.HasDebuggingToolAttached()) {
+        ++buffer_index;
+        buffer.SetObjectNameEXT(fmt::format("Staging Buffer {}", buffer_index).c_str());
+    }
+    const std::span<u8> mapped_span = buffer.Mapped();
+    StagingBuffer& entry = GetCache(usage)[log2].entries.emplace_back(StagingBuffer{
+        .buffer = std::move(buffer),
+        .mapped_span = mapped_span,
+        .usage = usage,
+        .log2_level = log2,
+        .index = unique_ids++,
+        .tick = deferred ? std::numeric_limits<u64>::max() : scheduler.CurrentTick(),
+        .deferred = deferred,
+    });
+    return entry.Ref();
+}
+
+StagingBufferPool::StagingBuffersCache& StagingBufferPool::GetCache(MemoryUsage usage) {
+    switch (usage) {
+    case MemoryUsage::DeviceLocal:
+        return device_local_cache;
+    case MemoryUsage::Upload:
+        return upload_cache;
+    case MemoryUsage::Download:
+        return download_cache;
+    default:
+        ASSERT_MSG(false, "Invalid memory usage={}", usage);
+        return upload_cache;
+    }
+}
+
+void StagingBufferPool::ReleaseCache(MemoryUsage usage) {
+    ReleaseLevel(GetCache(usage), current_delete_level);
+}
+
+void StagingBufferPool::ReleaseLevel(StagingBuffersCache& cache, size_t log2) {
+    constexpr size_t deletions_per_tick = 64;
+    auto& staging = cache[log2];
+    auto& entries = staging.entries;
+    const size_t old_size = entries.size();
+
+    const auto is_deletable = [this](const StagingBuffer& entry) {
+        return scheduler.IsFree(entry.tick);
+    };
+    const size_t begin_offset = staging.delete_index;
+    const size_t end_offset = std::min(begin_offset + deletions_per_tick, old_size);
+    const auto begin = entries.begin() + begin_offset;
+    const auto end = entries.begin() + end_offset;
+    entries.erase(std::remove_if(begin, end, is_deletable), end);
+
+    const size_t new_size = entries.size();
+    staging.delete_index += deletions_per_tick;
+    if (staging.delete_index >= new_size) {
+        staging.delete_index = 0;
+    }
+    if (staging.iterate_index > new_size) {
+        staging.iterate_index = 0;
+    }
+}
+
+void StagingBufferPool::ReleaseAllFreeBuffers() {
+    const auto nuke_free = [this](StagingBuffersCache& cache) {
+        for (auto& staging : cache) {
+            auto& entries = staging.entries;
+            const auto is_deletable = [this](const StagingBuffer& entry) {
+                return !entry.deferred && scheduler.IsFree(entry.tick);
+            };
+            entries.erase(std::remove_if(entries.begin(), entries.end(), is_deletable),
+                          entries.end());
+            staging.delete_index = 0;
+            staging.iterate_index = std::min(staging.iterate_index, entries.size());
+        }
+    };
+    nuke_free(device_local_cache);
+    nuke_free(upload_cache);
+    nuke_free(download_cache);
+}
+
+void StagingBufferPool::Nuke() {
+    auto nuke_cache = [](StagingBuffersCache& cache) {
+        for (auto& level : cache) {
+            level.entries.clear();
+            level.entries.shrink_to_fit();
+        }
+    };
+    nuke_cache(device_local_cache);
+    nuke_cache(upload_cache);
+    nuke_cache(download_cache);
+    stream_buffer.reset();
+}
+
+} // namespace Vulkan

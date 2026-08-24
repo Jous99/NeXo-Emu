@@ -1,0 +1,85 @@
+// SPDX-FileCopyrightText: Copyright 2020 yuzu Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#pragma once
+
+#include <algorithm>
+#include <vector>
+
+#include "common/common_types.h"
+#include "common/div_ceil.h"
+#include "video_core/memory_manager.h"
+#include "video_core/rasterizer_interface.h"
+
+namespace VideoCommon {
+
+template <typename Descriptor>
+class DescriptorTable {
+public:
+    explicit DescriptorTable(Tegra::MemoryManager& gpu_memory_) : gpu_memory{gpu_memory_} {}
+
+    [[nodiscard]] bool Synchronize(GPUVAddr gpu_addr, u32 limit) {
+        [[likely]] if (current_gpu_addr == gpu_addr && current_limit == limit) { return false; }
+        Refresh(gpu_addr, limit);
+        return true;
+    }
+
+    [[nodiscard]] u32 Limit() const noexcept {
+        return current_limit;
+    }
+
+    [[nodiscard]] u64 Generation() const noexcept {
+        return generation;
+    }
+
+    void Invalidate() noexcept {
+        std::ranges::fill(read_descriptors, 0);
+        ++generation;
+    }
+
+    [[nodiscard]] std::pair<Descriptor, bool> Read(u32 index) {
+        DEBUG_ASSERT(index <= current_limit);
+        const GPUVAddr gpu_addr = current_gpu_addr + index * sizeof(Descriptor);
+        std::pair<Descriptor, bool> result;
+        gpu_memory.ReadBlockUnsafe(gpu_addr, &result.first, sizeof(Descriptor),
+                                   "TextureCache.DescriptorTable");
+        if (IsDescriptorRead(index)) {
+            result.second = result.first != descriptors[index];
+        } else {
+            MarkDescriptorAsRead(index);
+            result.second = true;
+        }
+        if (result.second) {
+            descriptors[index] = result.first;
+        }
+        return result;
+    }
+
+    void Refresh(GPUVAddr gpu_addr, u32 limit) noexcept {
+        current_gpu_addr = gpu_addr;
+        current_limit = limit;
+        ++generation;
+
+        const size_t num_descriptors = static_cast<size_t>(limit) + 1;
+        read_descriptors.clear();
+        read_descriptors.resize(Common::DivCeil(num_descriptors, 64U), 0);
+        descriptors.resize(num_descriptors);
+    }
+
+    void MarkDescriptorAsRead(u32 index) noexcept {
+        read_descriptors[index / 64] |= 1ULL << (index % 64);
+    }
+
+    [[nodiscard]] bool IsDescriptorRead(u32 index) const noexcept {
+        return (read_descriptors[index / 64] & (1ULL << (index % 64))) != 0;
+    }
+
+    Tegra::MemoryManager& gpu_memory;
+    GPUVAddr current_gpu_addr{};
+    u32 current_limit{};
+    u64 generation{};
+    std::vector<u64> read_descriptors;
+    std::vector<Descriptor> descriptors;
+};
+
+} // namespace VideoCommon

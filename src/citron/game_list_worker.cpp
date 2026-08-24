@@ -1,0 +1,1016 @@
+// SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
+// SPDX-FileCopyrightText: Copyright 2025 citron Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include <chrono>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <system_error>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <QCryptographicHash>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSettings>
+#include <QStandardPaths>
+
+#include "citron/compatibility_list.h"
+#include "citron/custom_metadata.h"
+#include "citron/game_list.h"
+#include "citron/game_list_p.h"
+#include "citron/game_list_worker.h"
+#include "common/nexo_compatible_titles.h"
+#include "citron/uisettings.h"
+#include "common/fs/fs.h"
+#include "common/fs/path_util.h"
+#include "core/core.h"
+#include "core/file_sys/card_image.h"
+#include "core/file_sys/content_archive.h"
+#include "core/file_sys/control_metadata.h"
+#include "core/file_sys/fs_filesystem.h"
+#include "core/file_sys/nca_metadata.h"
+#include "core/file_sys/patch_manager.h"
+#include "core/file_sys/registered_cache.h"
+#include "core/file_sys/submission_package.h"
+#include "core/loader/loader.h"
+
+namespace {
+
+// Structure to hold cached game metadata
+struct CachedGameMetadata {
+    u64 program_id = 0;
+    Loader::FileType file_type = Loader::FileType::Unknown;
+    std::size_t file_size = 0;
+    std::string title;
+    std::vector<u8> icon;
+    std::string file_path;
+    std::int64_t modification_time = 0; // Unix timestamp
+
+    bool IsValid() const {
+        return program_id != 0 && file_type != Loader::FileType::Unknown;
+    }
+};
+
+// In-memory cache for game metadata
+static std::unordered_map<std::string, CachedGameMetadata> game_metadata_cache;
+
+// Generate a cache key from file path
+std::string GetCacheKey(const std::string& file_path) {
+    // Use a hash of the normalized path as the key
+    std::error_code ec;
+    std::filesystem::path normalized_path;
+    try {
+        normalized_path = std::filesystem::canonical(std::filesystem::path(file_path), ec);
+        if (ec) {
+            // If canonical fails, use the original path
+            normalized_path = std::filesystem::path(file_path);
+        }
+    } catch (...) {
+        // If canonical throws, use the original path
+        normalized_path = std::filesystem::path(file_path);
+    }
+
+    const auto path_str = Common::FS::PathToUTF8String(normalized_path);
+    const auto hash =
+        QCryptographicHash::hash(QByteArray::fromStdString(path_str), QCryptographicHash::Sha256);
+    return hash.toHex().toStdString();
+}
+
+// Load game metadata cache from disk
+void LoadGameMetadataCache() {
+    if (!UISettings::values.cache_game_list) {
+        return;
+    }
+
+    game_metadata_cache.clear();
+
+    const auto cache_dir =
+        Common::FS::GetCitronPath(Common::FS::CitronPath::CacheDir) / "game_list";
+    const auto cache_file = Common::FS::PathToUTF8String(cache_dir / "game_metadata_cache.json");
+
+    if (!Common::FS::Exists(cache_file)) {
+        return;
+    }
+
+    QFile file(QString::fromStdString(cache_file));
+    if (!file.open(QFile::ReadOnly)) {
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (!doc.isObject()) {
+        return;
+    }
+
+    const QJsonObject root = doc.object();
+    const QJsonArray entries = root[QStringLiteral("entries")].toArray();
+
+    for (const QJsonValue& value : entries) {
+        const QJsonObject entry = value.toObject();
+        const std::string key = entry[QStringLiteral("key")].toString().toStdString();
+
+        CachedGameMetadata metadata;
+        metadata.program_id =
+            entry[QStringLiteral("program_id")].toString().toULongLong(nullptr, 16);
+        metadata.file_type =
+            static_cast<Loader::FileType>(entry[QStringLiteral("file_type")].toInt());
+        metadata.file_size =
+            static_cast<std::size_t>(entry[QStringLiteral("file_size")].toVariant().toULongLong());
+        metadata.title = entry[QStringLiteral("title")].toString().toStdString();
+        metadata.file_path = entry[QStringLiteral("file_path")].toString().toStdString();
+        metadata.modification_time =
+            entry[QStringLiteral("modification_time")].toVariant().toLongLong();
+
+        const QByteArray icon_data =
+            QByteArray::fromBase64(entry[QStringLiteral("icon")].toString().toUtf8());
+        metadata.icon.assign(icon_data.begin(), icon_data.end());
+
+        if (metadata.IsValid()) {
+            game_metadata_cache[key] = std::move(metadata);
+        }
+    }
+}
+
+// Save game metadata cache to disk
+void SaveGameMetadataCache() {
+    if (!UISettings::values.cache_game_list) {
+        return;
+    }
+
+    const auto cache_dir =
+        Common::FS::GetCitronPath(Common::FS::CitronPath::CacheDir) / "game_list";
+    const auto cache_file = Common::FS::PathToUTF8String(cache_dir / "game_metadata_cache.json");
+
+    void(Common::FS::CreateParentDirs(cache_file));
+
+    QJsonObject root;
+    QJsonArray entries;
+
+    for (const auto& [key, metadata] : game_metadata_cache) {
+        QJsonObject entry;
+        entry[QStringLiteral("key")] = QString::fromStdString(key);
+        entry[QStringLiteral("program_id")] = QString::number(metadata.program_id, 16);
+        entry[QStringLiteral("file_type")] = static_cast<int>(metadata.file_type);
+        entry[QStringLiteral("file_size")] = static_cast<qint64>(metadata.file_size);
+        entry[QStringLiteral("title")] = QString::fromStdString(metadata.title);
+        entry[QStringLiteral("file_path")] = QString::fromStdString(metadata.file_path);
+        entry[QStringLiteral("modification_time")] =
+            static_cast<qint64>(metadata.modification_time);
+
+        const QByteArray icon_data(reinterpret_cast<const char*>(metadata.icon.data()),
+                                   static_cast<int>(metadata.icon.size()));
+        entry[QStringLiteral("icon")] = QString::fromLatin1(icon_data.toBase64());
+
+        entries.append(entry);
+    }
+
+    root[QStringLiteral("entries")] = entries;
+
+    QFile file(QString::fromStdString(cache_file));
+    if (file.open(QFile::WriteOnly)) {
+        const QJsonDocument doc(root);
+        file.write(doc.toJson());
+    }
+}
+
+// Get cached metadata or return nullptr if not found or invalid
+const CachedGameMetadata* GetCachedGameMetadata(const std::string& file_path) {
+    if (!UISettings::values.cache_game_list) {
+        return nullptr;
+    }
+
+    // Check if file still exists and modification time matches
+    if (!Common::FS::Exists(file_path)) {
+        return nullptr;
+    }
+
+    std::error_code ec;
+    const auto mod_time = std::filesystem::last_write_time(file_path, ec);
+    if (ec) {
+        return nullptr;
+    }
+
+    const auto mod_time_seconds =
+        std::chrono::duration_cast<std::chrono::seconds>(mod_time.time_since_epoch()).count();
+
+    const std::string key = GetCacheKey(file_path);
+    const auto it = game_metadata_cache.find(key);
+
+    if (it == game_metadata_cache.end()) {
+        return nullptr;
+    }
+
+    const auto& cached = it->second;
+
+    // Check if file path matches and modification time matches
+    if (cached.file_path != file_path || cached.modification_time != mod_time_seconds) {
+        return nullptr;
+    }
+
+    return &cached;
+}
+
+// Store game metadata in cache
+void CacheGameMetadata(const std::string& file_path, u64 program_id, Loader::FileType file_type,
+                       std::size_t file_size, const std::string& title,
+                       const std::vector<u8>& icon) {
+    if (!UISettings::values.cache_game_list) {
+        return;
+    }
+
+    std::error_code ec;
+    const auto mod_time = std::filesystem::last_write_time(file_path, ec);
+    if (ec) {
+        return;
+    }
+
+    const auto mod_time_seconds =
+        std::chrono::duration_cast<std::chrono::seconds>(mod_time.time_since_epoch()).count();
+
+    const std::string key = GetCacheKey(file_path);
+
+    CachedGameMetadata metadata;
+    metadata.program_id = program_id;
+    metadata.file_type = file_type;
+    metadata.file_size = file_size;
+    metadata.title = title;
+    metadata.icon = icon;
+    metadata.file_path = file_path;
+    metadata.modification_time = mod_time_seconds;
+
+    game_metadata_cache[key] = std::move(metadata);
+}
+
+QString GetGameListCachedObject(const std::string& filename, const std::string& ext,
+                                const std::function<QString()>& generator) {
+    if (!UISettings::values.cache_game_list || filename == "0000000000000000") {
+        return generator();
+    }
+
+    const auto path =
+        Common::FS::PathToUTF8String(Common::FS::GetCitronPath(Common::FS::CitronPath::CacheDir) /
+                                     "game_list" / fmt::format("{}.{}", filename, ext));
+
+    void(Common::FS::CreateParentDirs(path));
+
+    if (!Common::FS::Exists(path)) {
+        const auto str = generator();
+
+        QFile file{QString::fromStdString(path)};
+        if (file.open(QFile::WriteOnly)) {
+            file.write(str.toUtf8());
+        }
+
+        return str;
+    }
+
+    QFile file{QString::fromStdString(path)};
+    if (file.open(QFile::ReadOnly)) {
+        return QString::fromUtf8(file.readAll());
+    }
+
+    return generator();
+}
+
+std::pair<std::vector<u8>, std::string> GetGameListCachedObject(
+    const std::string& filename, const std::string& ext,
+    const std::function<std::pair<std::vector<u8>, std::string>()>& generator) {
+    if (!UISettings::values.cache_game_list || filename == "0000000000000000") {
+        return generator();
+    }
+
+    const auto game_list_dir =
+        Common::FS::GetCitronPath(Common::FS::CitronPath::CacheDir) / "game_list";
+    const auto jpeg_name = fmt::format("{}.jpeg", filename);
+    const auto app_name = fmt::format("{}.appname.txt", filename);
+
+    const auto path1 = Common::FS::PathToUTF8String(game_list_dir / jpeg_name);
+    const auto path2 = Common::FS::PathToUTF8String(game_list_dir / app_name);
+
+    void(Common::FS::CreateParentDirs(path1));
+
+    if (!Common::FS::Exists(path1) || !Common::FS::Exists(path2)) {
+        const auto [icon, nacp] = generator();
+
+        QFile file1{QString::fromStdString(path1)};
+        if (!file1.open(QFile::WriteOnly)) {
+            LOG_ERROR(Frontend, "Failed to open cache file.");
+            return generator();
+        }
+
+        if (!file1.resize(icon.size())) {
+            LOG_ERROR(Frontend, "Failed to resize cache file to necessary size.");
+            return generator();
+        }
+
+        if (file1.write(reinterpret_cast<const char*>(icon.data()), icon.size()) !=
+            s64(icon.size())) {
+            LOG_ERROR(Frontend, "Failed to write data to cache file.");
+            return generator();
+        }
+
+        QFile file2{QString::fromStdString(path2)};
+        if (file2.open(QFile::WriteOnly)) {
+            file2.write(nacp.data(), nacp.size());
+        }
+
+        return std::make_pair(icon, nacp);
+    }
+
+    QFile file1(QString::fromStdString(path1));
+    QFile file2(QString::fromStdString(path2));
+
+    if (!file1.open(QFile::ReadOnly)) {
+        LOG_ERROR(Frontend, "Failed to open cache file for reading.");
+        return generator();
+    }
+
+    if (!file2.open(QFile::ReadOnly)) {
+        LOG_ERROR(Frontend, "Failed to open cache file for reading.");
+        return generator();
+    }
+
+    std::vector<u8> vec(file1.size());
+    if (file1.read(reinterpret_cast<char*>(vec.data()), vec.size()) !=
+        static_cast<s64>(vec.size())) {
+        return generator();
+    }
+
+    const auto data = file2.readAll();
+    return std::make_pair(vec, data.toStdString());
+}
+
+void GetMetadataFromControlNCA(const FileSys::PatchManager& patch_manager, const FileSys::NCA& nca,
+                               std::vector<u8>& icon, std::string& name,
+                               std::string& original_name) {
+    const auto program_id = patch_manager.GetTitleID();
+    auto& custom_metadata = Citron::CustomMetadata::GetInstance();
+
+    std::tie(icon, original_name) =
+        GetGameListCachedObject(fmt::format("{:016X}", program_id), {}, [&patch_manager, &nca] {
+            const auto [nacp, icon_f] = patch_manager.ParseControlNCA(nca);
+            return std::make_pair(icon_f->ReadAllBytes(), nacp->GetApplicationName());
+        });
+
+    name = original_name;
+    if (auto custom_title = custom_metadata.GetCustomTitle(program_id)) {
+        name = *custom_title;
+    }
+
+    if (auto custom_icon_path = custom_metadata.GetCustomIconPath(program_id)) {
+        QFile icon_file(QString::fromStdString(*custom_icon_path));
+        if (icon_file.open(QFile::ReadOnly)) {
+            const QByteArray data = icon_file.readAll();
+            icon.assign(data.begin(), data.end());
+        }
+    }
+}
+
+bool HasSupportedFileExtension(const std::string& file_name) {
+    const QFileInfo file = QFileInfo(QString::fromStdString(file_name));
+    const QString suffix = file.suffix().toLower();
+
+    // 1. Check if it's a standard game container (.nsp, .xci, etc.)
+    if (GameList::supported_file_extensions.contains(suffix)) {
+        return true;
+    }
+
+    // 2. Only allow .nca if the user explicitly enabled it in the UI Settings
+    if (suffix == QStringLiteral("nca") && UISettings::values.scan_nca.GetValue()) {
+        return true;
+    }
+
+    return false;
+}
+
+bool IsExtractedNCAMain(const std::string& file_name) {
+    return QFileInfo(QString::fromStdString(file_name)).fileName() == QStringLiteral("main");
+}
+
+QString FormatGameName(const std::string& physical_name) {
+    const QString physical_name_as_qstring = QString::fromStdString(physical_name);
+    const QFileInfo file_info(physical_name_as_qstring);
+
+    if (IsExtractedNCAMain(physical_name)) {
+        return file_info.dir().path();
+    }
+
+    return physical_name_as_qstring;
+}
+
+QString FormatPatchNameVersions(const FileSys::PatchManager& patch_manager,
+                                Loader::AppLoader& loader, bool updatable = true) {
+    QString updates;
+    QString dlcs;
+    QString mods;
+
+    FileSys::VirtualFile update_raw;
+    loader.ReadUpdateRaw(update_raw);
+    for (const auto& patch : patch_manager.GetPatches(update_raw)) {
+        const QString patch_name = QString::fromStdString(patch.name);
+        const bool is_update = patch_name.startsWith(QLatin1String("Update"));
+        const bool is_dlc = patch_name.startsWith(QLatin1String("DLC")) || 
+                           patch_name.contains(QLatin1String("Add-On"), Qt::CaseInsensitive);
+
+        if (!updatable && is_update) {
+            continue;
+        }
+
+        QString clean_name = patch_name;
+        // Surgically strip redundant prefixes like "DLC: " or "Add-on: "
+        if (clean_name.startsWith(QLatin1String("DLC: "), Qt::CaseInsensitive)) {
+            clean_name.remove(0, 5);
+        } else if (clean_name.startsWith(QLatin1String("Add-on: "), Qt::CaseInsensitive)) {
+            clean_name.remove(0, 8);
+        }
+
+        QString type = patch.enabled ? clean_name : QLatin1String("[D] ") + clean_name;
+        QString version = QString::fromStdString(patch.version);
+        if (is_update && version == QLatin1String("PACKED")) {
+            version = QString::fromStdString(Loader::GetFileTypeString(loader.GetFileType()));
+        }
+
+        // Avoid doubling version if it's already in the name (e.g. "Update v1.0.1 (1.0.1)")
+        QString entry;
+        if (!version.isEmpty() && (type.contains(version) || type.contains(version.mid(1)))) {
+            entry = type;
+        } else {
+            entry = version.isEmpty() ? type : QStringLiteral("%1 (%2)").arg(type, version);
+        }
+
+        if (is_update) {
+            updates.append(entry + QStringLiteral("\n"));
+        } else if (is_dlc) {
+            dlcs.append(entry + QStringLiteral("\n"));
+        } else {
+            mods.append(entry + QStringLiteral("\n"));
+        }
+    }
+
+    QString out = updates + dlcs + mods;
+    if (out.endsWith(QLatin1Char('\n'))) {
+        out.chop(1);
+    }
+    return out;
+}
+
+QList<QStandardItem*> MakeGameListEntry(const std::string& path, const std::string& name,
+                                        const std::string& original_name,
+                                        const std::size_t size, const std::vector<u8>& icon,
+                                        Loader::AppLoader& loader, u64 program_id,
+                                        const CompatibilityList& compatibility_list,
+                                        const PlayTime::PlayTimeManager& play_time_manager,
+                                        const FileSys::PatchManager& patch,
+                                        const std::map<u64, std::pair<int, int>>& online_stats) {
+    const auto it = FindMatchingCompatibilityEntry(compatibility_list, program_id);
+
+    // The game list uses this as compatibility number for untested games
+    QString compatibility{QStringLiteral("99")};
+    if (it != compatibility_list.end()) {
+        compatibility = it->second.first;
+    }
+
+    const auto file_type = loader.GetFileType();
+    const auto file_type_string = QString::fromStdString(Loader::GetFileTypeString(file_type));
+
+    QString online_text = QStringLiteral("N/A");
+    auto it_stats = online_stats.find(program_id);
+    if (it_stats != online_stats.end()) {
+        const auto& stats = it_stats->second;
+        online_text =
+            QStringLiteral("Players: %1 | Servers: %2").arg(stats.first).arg(stats.second);
+    }
+
+    auto* path_item = new GameListItemPath(FormatGameName(path), icon, QString::fromStdString(name),
+                                           QString::fromStdString(original_name), file_type_string,
+                                           program_id);
+
+    const auto read_installed_version = [&patch] {
+        const auto [nacp, control_icon] = patch.GetControlMetadata();
+        return nacp ? QString::fromStdString(nacp->GetVersionString()) : QString{};
+    };
+    // NeXo's compatible-version check needs the CURRENT version, not a cached one from
+    // before the user last installed an update -- the on-disk cache below is never invalidated
+    // by an update install, so a NeXo-tracked title would otherwise show "update required"
+    // forever even after the update lands.
+    const QString installed_version =
+        NeXo::CompatibleTitles::Table().contains(program_id)
+            ? read_installed_version()
+            : GetGameListCachedObject(fmt::format("{:016X}", program_id), "nx_version.txt",
+                                      read_installed_version);
+    path_item->setData(installed_version, GameListItemPath::VersionRole);
+
+    QList<QStandardItem*> list{path_item,
+                               new GameListItemCompat(compatibility),
+                               new GameListItem(file_type_string),
+                               new GameListItemSize(size),
+                               new GameListItemPlayTime(play_time_manager.GetPlayTime(program_id)),
+                               new GameListItemOnline(online_text)};
+
+    const auto patch_versions = GetGameListCachedObject(
+        fmt::format("{:016X}", patch.GetTitleID()), "pv_v610_marquee.txt", [&patch, &loader] {
+            return FormatPatchNameVersions(patch, loader, loader.IsRomFSUpdatable());
+        });
+
+    auto* addon_item = new GameListItem(patch_versions);
+
+    // Create a high-end HTML tooltip for the Add-ons column
+    if (!patch_versions.isEmpty()) {
+        addon_item->setData(GameList::GenerateAddonsTooltip(patch_versions), Qt::ToolTipRole);
+    }
+
+    list.insert(2, addon_item);
+
+    return list;
+}
+} // Anonymous namespace
+
+GameListWorker::GameListWorker(std::shared_ptr<FileSys::VfsFilesystem> vfs_,
+                               FileSys::ManualContentProvider* provider_,
+                               QVector<UISettings::GameDir>& game_dirs_,
+                               const CompatibilityList& compatibility_list_,
+                               const PlayTime::PlayTimeManager& play_time_manager_,
+                               Core::System& system_,
+                               std::shared_ptr<Core::AnnounceMultiplayerSession> session_)
+    : vfs{std::move(vfs_)}, provider{provider_}, game_dirs{game_dirs_},
+      compatibility_list{compatibility_list_}, play_time_manager{play_time_manager_},
+      system{system_}, session{session_} {
+    // We want the game list to manage our lifetime.
+    setAutoDelete(false);
+}
+
+GameListWorker::~GameListWorker() {
+    this->disconnect();
+    stop_requested.store(true);
+    processing_completed.Wait();
+}
+
+void GameListWorker::Cancel() {
+    this->disconnect();
+    stop_requested.store(true);
+}
+
+void GameListWorker::MarkAsCanceledBeforeStart() {
+    stop_requested.store(true);
+    processing_completed.Set();
+}
+
+
+void GameListWorker::AddTitlesToGameList(const QString& parent_path,
+                                         const std::map<u64, std::pair<int, int>>& online_stats) {
+    using namespace FileSys;
+
+    const auto& cache = system.GetContentProviderUnion();
+
+    auto installed_games = cache.ListEntriesFilterOrigin(std::nullopt, TitleType::Application,
+                                                         ContentRecordType::Program);
+
+    if (parent_path == QObject::tr("Installed SD Titles")) {
+        installed_games = cache.ListEntriesFilterOrigin(
+            ContentProviderUnionSlot::SDMC, TitleType::Application, ContentRecordType::Program);
+    } else if (parent_path == QObject::tr("Installed NAND Titles")) {
+        installed_games = cache.ListEntriesFilterOrigin(
+            ContentProviderUnionSlot::UserNAND, TitleType::Application, ContentRecordType::Program);
+    } else if (parent_path == QObject::tr("System Titles")) {
+        installed_games = cache.ListEntriesFilterOrigin(
+            ContentProviderUnionSlot::SysNAND, TitleType::Application, ContentRecordType::Program);
+    }
+
+    for (const auto& [slot, game] : installed_games) {
+        if (stop_requested) {
+            break;
+        }
+
+        if (slot == ContentProviderUnionSlot::FrontendManual) {
+            continue;
+        }
+
+        const auto file = cache.GetEntryUnparsed(game.title_id, game.type);
+        std::unique_ptr<Loader::AppLoader> loader = Loader::GetLoader(system, file);
+        if (!loader) {
+            continue;
+        }
+
+        std::vector<u8> icon;
+        std::string name;
+        std::string original_name;
+        u64 program_id = 0;
+        const auto result = loader->ReadProgramId(program_id);
+
+        if (result != Loader::ResultStatus::Success) {
+            continue;
+        }
+
+        const PatchManager patch{program_id, system.GetFileSystemController(),
+                                 system.GetContentProvider()};
+        const auto control = cache.GetEntry(game.title_id, ContentRecordType::Control);
+        if (control != nullptr) {
+            GetMetadataFromControlNCA(patch, *control, icon, name, original_name);
+        }
+
+        auto entry = MakeGameListEntry(file->GetFullPath(), name, original_name, file->GetSize(),
+                                       icon, *loader, program_id, compatibility_list,
+                                       play_time_manager, patch, online_stats);
+        emit EntryReady(entry, parent_path);
+    }
+}
+
+void GameListWorker::AddHomebrewToGameList(const QString& parent_path,
+                                           const std::map<u64, std::pair<int, int>>& online_stats) {
+    // Get SDMC path and scan the switch folder for .nro homebrew files
+    const auto sdmc_path = Common::FS::GetCitronPath(Common::FS::CitronPath::SDMCDir);
+    const auto switch_folder = sdmc_path / "switch";
+
+    if (!Common::FS::IsDir(switch_folder)) {
+        LOG_INFO(Frontend, "Homebrew folder does not exist: {}",
+                 Common::FS::PathToUTF8String(switch_folder));
+        return;
+    }
+
+    LOG_INFO(Frontend, "Scanning for homebrew in: {}",
+             Common::FS::PathToUTF8String(switch_folder));
+
+    const auto scan_callback = [this, &parent_path,
+                                &online_stats](const std::filesystem::directory_entry& entry) -> bool {
+        if (stop_requested) {
+            return false;
+        }
+
+        if (entry.is_directory()) {
+            return true;  // Continue scanning subdirectories
+        }
+
+        const auto& path = entry.path();
+        const auto extension = path.extension().string();
+
+        // Only process .nro files
+        if (extension != ".nro" && extension != ".NRO") {
+            return true;
+        }
+
+        const std::string physical_name = Common::FS::PathToUTF8String(path);
+        LOG_DEBUG(Frontend, "Found homebrew: {}", physical_name);
+
+        // Open the file and create a loader
+        const auto file = vfs->OpenFile(physical_name, FileSys::OpenMode::Read);
+        if (!file) {
+            LOG_WARNING(Frontend, "Failed to open homebrew file: {}", physical_name);
+            return true;
+        }
+
+        auto loader = Loader::GetLoader(system, file);
+        if (!loader) {
+            LOG_WARNING(Frontend, "Failed to create loader for: {}", physical_name);
+            return true;
+        }
+
+        // Only process NRO files
+        if (loader->GetFileType() != Loader::FileType::NRO) {
+            return true;
+        }
+
+        // Read metadata from the NRO
+        std::vector<u8> icon;
+        std::string name;
+        u64 program_id = 0;
+
+        loader->ReadIcon(icon);
+        loader->ReadTitle(name);
+        loader->ReadProgramId(program_id);
+
+        // If no title found, use filename
+        if (name.empty()) {
+            name = path.stem().string();
+        }
+
+        // If no program_id, generate a fake one based on path hash
+        // This ensures each homebrew has a unique ID for the game list
+        if (program_id == 0) {
+            // Use a hash of the path as a fake program ID in the homebrew range
+            // Homebrew typically uses 0x05... range
+            std::hash<std::string> hasher;
+            program_id = 0x0500000000000000ULL | (hasher(physical_name) & 0x00FFFFFFFFFFFFFFULL);
+        }
+
+        const std::size_t file_size = Common::FS::GetSize(physical_name);
+
+        // Create a dummy patch manager (homebrew doesn't have patches)
+        const FileSys::PatchManager patch{program_id, system.GetFileSystemController(),
+                                          system.GetContentProvider()};
+
+        auto entry_item = MakeGameListEntry(physical_name, name, name, file_size, icon, *loader,
+                                            program_id, compatibility_list, play_time_manager,
+                                            patch, online_stats);
+        emit EntryReady(entry_item, parent_path);
+
+        return true;
+    };
+
+    // Recursively scan the switch folder
+    Common::FS::IterateDirEntriesRecursively(switch_folder, scan_callback,
+                                             Common::FS::DirEntryFilter::All);
+}
+
+void GameListWorker::ScanFileSystem(ScanTarget target, const std::string& dir_path, bool deep_scan,
+                                    const QString& parent_path,
+                                    const std::map<u64, std::pair<int, int>>& online_stats,
+                                    int& processed_files, int total_files) {
+    const auto callback = [this, target, parent_path, &online_stats, &processed_files,
+                           total_files](const std::filesystem::directory_entry& dir_entry) -> bool {
+        if (stop_requested) {
+            return false;
+        }
+
+        if (dir_entry.is_directory()) {
+            return true;
+        }
+
+        const auto& path = dir_entry.path();
+        const auto physical_name = Common::FS::PathToUTF8String(path);
+
+        if (physical_name.find("/nand/") != std::string::npos ||
+            physical_name.find("\\nand\\") != std::string::npos ||
+            physical_name.find("/registered/") != std::string::npos ||
+            physical_name.find("\\registered\\") != std::string::npos) {
+            return true;
+        }
+
+        if (!HasSupportedFileExtension(physical_name) && !IsExtractedNCAMain(physical_name)) {
+            return true;
+        }
+
+        // Cache Check
+        const auto* cached = GetCachedGameMetadata(physical_name);
+        if (cached && cached->IsValid() &&
+            (target == ScanTarget::PopulateGameList || target == ScanTarget::Both)) {
+            auto file = vfs->OpenFile(physical_name, FileSys::OpenMode::Read);
+            if (file) {
+                // 1. Register with provider if requested
+                if (target == ScanTarget::FillManualContentProvider || target == ScanTarget::Both) {
+                    if (cached->file_type == Loader::FileType::NCA) {
+                        provider->AddEntry(
+                            FileSys::TitleType::Application,
+                            FileSys::GetCRTypeFromNCAType(FileSys::NCA{file}.GetType()),
+                            cached->program_id, file);
+                    } else if (cached->file_type == Loader::FileType::XCI ||
+                               cached->file_type == Loader::FileType::NSP) {
+                        const auto nsp = cached->file_type == Loader::FileType::NSP
+                                             ? std::make_shared<FileSys::NSP>(file)
+                                             : FileSys::XCI{file}.GetSecurePartitionNSP();
+                        if (nsp) {
+                            for (const auto& title : nsp->GetNCAs()) {
+                                for (const auto& entry : title.second) {
+                                    if (entry.second) {
+                                        provider->AddEntry(entry.first.first, entry.first.second,
+                                                           title.first, entry.second->GetBaseFile());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Populate UI if requested (only for base games)
+                if ((cached->program_id & 0xFFF) == 0 &&
+                    (target == ScanTarget::PopulateGameList || target == ScanTarget::Both)) {
+                    const FileSys::PatchManager patch{cached->program_id,
+                                                      system.GetFileSystemController(),
+                                                      system.GetContentProvider()};
+                    auto loader = Loader::GetLoader(system, file);
+                    if (loader) {
+                        std::string name = cached->title;
+                        std::string original_name = cached->title;
+                        std::vector<u8> icon = cached->icon;
+
+                        auto& custom_metadata = Citron::CustomMetadata::GetInstance();
+                        if (auto custom_title =
+                                custom_metadata.GetCustomTitle(cached->program_id)) {
+                            name = *custom_title;
+                        }
+
+                        if (auto custom_icon_path =
+                                custom_metadata.GetCustomIconPath(cached->program_id)) {
+                            QFile icon_file(QString::fromStdString(*custom_icon_path));
+                            if (icon_file.open(QFile::ReadOnly)) {
+                                const QByteArray data = icon_file.readAll();
+                                icon.assign(data.begin(), data.end());
+                            }
+                        }
+
+                        auto entry =
+                            MakeGameListEntry(physical_name, name, original_name, cached->file_size,
+                                              icon, *loader, cached->program_id, compatibility_list,
+                                              play_time_manager, patch, online_stats);
+                        emit EntryReady(entry, parent_path);
+                    }
+                }
+            }
+
+            processed_files++;
+            emit ProgressUpdated(std::min(100, (processed_files * 100) / total_files));
+            return true;
+        }
+
+        // Full Scan
+        const auto file = vfs->OpenFile(physical_name, FileSys::OpenMode::Read);
+        if (!file) {
+            processed_files++;
+            return true;
+        }
+
+        auto loader = Loader::GetLoader(system, file);
+        if (!loader) {
+            processed_files++;
+            return true;
+        }
+
+        u64 program_id = 0;
+        const auto res2 = loader->ReadProgramId(program_id);
+        const auto file_type = loader->GetFileType();
+
+        if (res2 == Loader::ResultStatus::Success && program_id != 0) {
+
+            if (target == ScanTarget::FillManualContentProvider || target == ScanTarget::Both) {
+                if (file_type == Loader::FileType::NCA) {
+                    provider->AddEntry(FileSys::TitleType::Application,
+                                       FileSys::GetCRTypeFromNCAType(FileSys::NCA{file}.GetType()),
+                                       program_id, file);
+                } else if (file_type == Loader::FileType::XCI ||
+                           file_type == Loader::FileType::NSP) {
+                    const auto nsp = file_type == Loader::FileType::NSP
+                                         ? std::make_shared<FileSys::NSP>(file)
+                                         : FileSys::XCI{file}.GetSecurePartitionNSP();
+                    if (nsp) {
+                        for (const auto& title : nsp->GetNCAs()) {
+                            for (const auto& entry : title.second) {
+                                if (entry.second) {
+                                    provider->AddEntry(entry.first.first, entry.first.second, title.first,
+                                                       entry.second->GetBaseFile());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (target == ScanTarget::PopulateGameList || target == ScanTarget::Both) {
+                // 3. FILTER UPDATES: Only add to UI if it's a Base Game (ID ends in 000)
+                if ((program_id & 0xFFF) == 0) {
+                    std::vector<u8> icon;
+                    std::string original_name = " ";
+                    std::string name = " ";
+                    loader->ReadIcon(icon);
+                    loader->ReadTitle(original_name);
+                    name = original_name;
+
+                    auto& custom_metadata = Citron::CustomMetadata::GetInstance();
+                    if (auto custom_title = custom_metadata.GetCustomTitle(program_id)) {
+                        name = *custom_title;
+                    }
+
+                    if (auto custom_icon_path = custom_metadata.GetCustomIconPath(program_id)) {
+                        QFile icon_file(QString::fromStdString(*custom_icon_path));
+                        if (icon_file.open(QFile::ReadOnly)) {
+                            const QByteArray data = icon_file.readAll();
+                            icon.assign(data.begin(), data.end());
+                        }
+                    }
+
+                    std::size_t file_size = Common::FS::GetSize(physical_name);
+
+                    CacheGameMetadata(physical_name, program_id, file_type, file_size,
+                                      original_name, icon);
+
+                    const FileSys::PatchManager patch{program_id, system.GetFileSystemController(),
+                                                      system.GetContentProvider()};
+                    auto entry = MakeGameListEntry(physical_name, name, original_name, file_size,
+                                                   icon, *loader, program_id, compatibility_list,
+                                                   play_time_manager, patch, online_stats);
+                    emit EntryReady(entry, parent_path);
+                }
+            }
+        }
+
+        processed_files++;
+        emit ProgressUpdated(std::min(100, (processed_files * 100) / total_files));
+        return true;
+    };
+
+    if (deep_scan) {
+        Common::FS::IterateDirEntriesRecursively(dir_path, callback,
+                                                 Common::FS::DirEntryFilter::All);
+    } else {
+        Common::FS::IterateDirEntries(dir_path, callback, Common::FS::DirEntryFilter::File);
+    }
+}
+
+void GameListWorker::run() {
+    if (stop_requested) {
+        processing_completed.Set();
+        return;
+    }
+    LoadGameMetadataCache();
+
+    std::map<u64, std::pair<int, int>> online_stats;
+    // if (session) {
+    //     AnnounceMultiplayerRoom::RoomList room_list = session->GetRoomList();
+    //     for (const auto& room : room_list) {
+    //         u64 game_id = room.information.preferred_game.id;
+    //         if (game_id != 0) {
+    //             online_stats[game_id].first += (int)room.members.size();
+    //             online_stats[game_id].second++;
+    //         }
+    //     }
+    // }
+
+    watch_list.clear();
+    provider->ClearAllEntries();
+
+    int total_files = 0;
+    int processed_files = 0;
+
+    for (const auto& game_dir : game_dirs) {
+        if (game_dir.path == "SDMC" || game_dir.path == "UserNAND" || game_dir.path == "SysNAND")
+            continue;
+
+        auto count_callback = [&](const std::filesystem::directory_entry& dir_entry) -> bool {
+            if (stop_requested) {
+                return false;
+            }
+
+            if (dir_entry.is_directory()) {
+                return true;
+            }
+
+            const auto& path = dir_entry.path();
+            const std::string physical_name = Common::FS::PathToUTF8String(path);
+            if (HasSupportedFileExtension(physical_name)) {
+                total_files++;
+            }
+            return true;
+        };
+
+        if (game_dir.deep_scan) {
+            Common::FS::IterateDirEntriesRecursively(game_dir.path, count_callback,
+                                                     Common::FS::DirEntryFilter::All);
+        } else {
+            Common::FS::IterateDirEntries(game_dir.path, count_callback,
+                                          Common::FS::DirEntryFilter::File);
+        }
+    }
+
+    if (total_files <= 0)
+        total_files = 1;
+
+    const auto TriggerDirEntryReady = [&](GameListDir* game_list_dir) {
+        emit DirEntryReady(game_list_dir);
+    };
+
+    for (UISettings::GameDir& game_dir : game_dirs) {
+        if (stop_requested)
+            break;
+
+        if (game_dir.path == "SDMC" || game_dir.path == "UserNAND" || game_dir.path == "SysNAND")
+            continue;
+
+        watch_list.append(QString::fromStdString(game_dir.path));
+        auto* const game_list_dir = new GameListDir(game_dir);
+        const QString dir_path_q = game_list_dir->data(GameListDir::FullPathRole).toString();
+        TriggerDirEntryReady(game_list_dir);
+
+        ScanFileSystem(ScanTarget::Both, game_dir.path, game_dir.deep_scan, dir_path_q,
+                       online_stats, processed_files, total_files);
+    }
+
+    // NZP: Add Homebrew directory to scan SDMC/switch for .nro files
+    if (!stop_requested) {
+        // Check if SDMC/switch folder exists before creating the Homebrew entry
+        const auto sdmc_path = Common::FS::GetCitronPath(Common::FS::CitronPath::SDMCDir);
+        const auto switch_folder = sdmc_path / "switch";
+
+        if (Common::FS::IsDir(switch_folder)) {
+            // Create a dummy GameDir for the homebrew folder
+            UISettings::GameDir homebrew_dir;
+            homebrew_dir.path = "Homebrew";
+            homebrew_dir.expanded = true;
+
+            auto* const homebrew_list_dir =
+                new GameListDir(homebrew_dir, GameListItemType::HomebrewDir);
+            TriggerDirEntryReady(homebrew_list_dir);
+
+            // Scan and add homebrew entries
+            AddHomebrewToGameList(QObject::tr("Homebrew"), online_stats);
+        }
+    }
+
+    emit Finished(watch_list);
+    SaveGameMetadataCache();
+    processing_completed.Set();
+}
