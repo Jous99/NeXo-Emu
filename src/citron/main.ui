@@ -150,7 +150,7 @@
    </widget>
    <widget class="QMenu" name="menu_NeXo">
     <property name="title">
-     <string>Nex&amp;Tendo</string>
+     <string>Ne&amp;Xo</string>
     </property>
     <addaction name="action_NeXo_Open_Account"/>
     <addaction name="action_NeXo_Population"/>
